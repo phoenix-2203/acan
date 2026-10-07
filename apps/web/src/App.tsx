@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ASSETS, LEDGERS_PER_DAY, LEDGERS_PER_HOUR, usdcToStroops } from "@acan/core/browser";
 import {
+  currentLedger,
   explorer,
   fmt,
   grantAgent,
@@ -15,14 +16,41 @@ import {
   type AgentGrant,
   type Payment,
 } from "./acan";
+import {
+  approve,
+  checkRequest,
+  fetchApprovals,
+  fetchAudit,
+  fetchConfig,
+  reject,
+  type GuardianConfig,
+  type Approval,
+  type AuditReport,
+} from "./guardian";
 
-type Busy = null | "create" | "connect" | "grant" | `revoke-${number}`;
+type Busy = null | "create" | "connect" | "grant" | `revoke-${number}` | `approve-${string}` | `reject-${string}`;
 
 const PERIODS = [
   { label: "per hour", ledgers: LEDGERS_PER_HOUR },
   { label: "per day", ledgers: LEDGERS_PER_DAY },
   { label: "per week", ledgers: LEDGERS_PER_DAY * 7 },
 ];
+
+const EXPIRIES = [
+  { label: "never", ledgers: 0 },
+  { label: "in 1 hour", ledgers: LEDGERS_PER_HOUR },
+  { label: "in 1 day", ledgers: LEDGERS_PER_DAY },
+  { label: "in 7 days", ledgers: LEDGERS_PER_DAY * 7 },
+];
+
+/** "expires in 3 h", "expired", or "" (no expiry). ~5 s per ledger. */
+function expiryLabel(validUntil: number | undefined, ledger: number | null): string {
+  if (validUntil === undefined || ledger === null) return "";
+  const left = validUntil - ledger;
+  if (left < 0) return "expired";
+  const mins = Math.round((left * 5) / 60);
+  return mins >= 90 ? `expires in ${Math.round(mins / 60)} h` : `expires in ${mins} min`;
+}
 
 const periodLabel = (ledgers: number) =>
   PERIODS.find((p) => p.ledgers === ledgers)?.label ?? `per ${ledgers} ledgers`;
@@ -40,6 +68,14 @@ export default function App() {
   const [agentKey, setAgentKey] = useState("");
   const [limit, setLimit] = useState("0.05");
   const [period, setPeriod] = useState(LEDGERS_PER_DAY);
+  const [expiry, setExpiry] = useState(0);
+  const [ledger, setLedger] = useState<number | null>(null);
+  const [approvals, setApprovals] = useState<Approval[] | null>(null);
+  const [config, setConfig] = useState<GuardianConfig | null>(null);
+  const [allowOnly, setAllowOnly] = useState<Record<string, boolean>>({});
+  const [useAllowlist, setUseAllowlist] = useState(true);
+  const [audit, setAudit] = useState<AuditReport | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   // Silent restore of a previous passkey session.
   useEffect(() => {
@@ -53,15 +89,55 @@ export default function App() {
     if (!account) return;
     const g = loadGrants(account);
     setGrants(g);
-    const [bal, pays, ...allow] = await Promise.all([
+    const [seq, bal, pays, ...allow] = await Promise.all([
+      currentLedger().catch(() => null),
       usdcBalance(account).catch(() => null),
       recentPayments(account).catch(() => [] as Payment[]),
       ...g.map((x) => readAllowance(x.ruleId)),
     ]);
-    setBalance(bal);
-    setPayments(pays);
-    setAllowances(Object.fromEntries(g.map((x, i) => [x.ruleId, allow[i]])));
+    setLedger(seq as number | null);
+    setBalance(bal as bigint | null);
+    setPayments(pays as Payment[]);
+    setAllowances(Object.fromEntries(g.map((x, i) => [x.ruleId, allow[i] as Allowance | null])));
   }, [account]);
+
+  // Guardian service (npm run guardian): approval requests + decrypted private spending.
+  useEffect(() => {
+    fetchConfig()
+      .then((c) => {
+        setConfig(c);
+        setAllowOnly(Object.fromEntries(c.recipients.map((r) => [r.address, true])));
+        if (c.agentAddress) setAgentKey((k) => k || c.agentAddress!);
+      })
+      .catch(() => setConfig(null));
+  }, []);
+
+  const refreshGuardian = useCallback(async () => {
+    try {
+      setApprovals(await fetchApprovals());
+    } catch {
+      setApprovals(null);
+    }
+  }, []);
+  const refreshAudit = useCallback(async () => {
+    try {
+      setAudit(await fetchAudit());
+      setAuditError(null);
+    } catch (e) {
+      setAuditError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+  useEffect(() => {
+    if (!account) return;
+    refreshGuardian();
+    refreshAudit();
+    const t1 = setInterval(refreshGuardian, 2000);
+    const t2 = setInterval(refreshAudit, 15000);
+    return () => {
+      clearInterval(t1);
+      clearInterval(t2);
+    };
+  }, [account, refreshGuardian, refreshAudit]);
 
   useEffect(() => {
     if (!account) return;
@@ -105,7 +181,14 @@ export default function App() {
 
   const grant = () =>
     run("grant", async () => {
-      const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period);
+      const allowlist =
+        config?.allowlistPolicy && useAllowlist
+          ? {
+              policy: config.allowlistPolicy,
+              recipients: config.recipients.filter((r) => allowOnly[r.address]).map((r) => r.address),
+            }
+          : undefined;
+      const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period, expiry || undefined, allowlist);
       setNotice(`Agent authorized under rule #${g.ruleId}. Copy the .env lines below into your project.`);
       setAgentKey("");
       await refresh();
@@ -117,6 +200,22 @@ export default function App() {
       setNotice(`Rule #${ruleId} deleted. The agent key can no longer spend anything.`);
       await refresh();
     });
+
+  const approveReq = (a: Approval) =>
+    run(`approve-${a.id}`, async () => {
+      await approve(a);
+      setNotice(`Approved ${a.amountUsdc} USDC to ${a.merchant}. The agent will pay it now; its allowance is unchanged.`);
+      await refreshGuardian();
+    });
+
+  const rejectReq = (a: Approval) =>
+    run(`reject-${a.id}`, async () => {
+      await reject(a);
+      setNotice(`Rejected ${a.amountUsdc} USDC to ${a.merchant}.`);
+      await refreshGuardian();
+    });
+
+  const nameOf = (addr?: string) => (addr ? audit?.names[addr] ?? short(addr) : "");
 
   return (
     <div className="page">
@@ -209,7 +308,36 @@ export default function App() {
                 ))}
               </select>
             </label>
+            <label className="grow">
+              Expires
+              <select value={expiry} onChange={(e) => setExpiry(Number(e.target.value))} disabled={!account}>
+                {EXPIRIES.map((x) => (
+                  <option key={x.ledgers} value={x.ledgers}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          {config?.allowlistPolicy && (
+            <fieldset className="allowlist">
+              <label className="check">
+                <input type="checkbox" checked={useAllowlist} onChange={(e) => setUseAllowlist(e.target.checked)} />
+                Only allow payments to these recipients (merchant allowlist contract)
+              </label>
+              {useAllowlist &&
+                config.recipients.map((r) => (
+                  <label className="check sub" key={r.address}>
+                    <input
+                      type="checkbox"
+                      checked={!!allowOnly[r.address]}
+                      onChange={(e) => setAllowOnly({ ...allowOnly, [r.address]: e.target.checked })}
+                    />
+                    {r.label} <span className="mono muted">{short(r.address)}</span>
+                  </label>
+                ))}
+            </fieldset>
+          )}
           <button onClick={grant} disabled={!account || busy !== null || !agentKey.trim()}>
             {busy === "grant" ? "Waiting for passkey…" : "Approve with passkey"}
           </button>
@@ -232,7 +360,17 @@ export default function App() {
                   <span className="mono">Rule #{g.ruleId}</span>
                   <span className="mono muted">agent {short(g.agentKey)}</span>
                   {a === null && <span className="tag">removed</span>}
+                  {a !== null && expiryLabel(g.validUntil, ledger) && (
+                    <span className="tag">
+                      {expiryLabel(g.validUntil, ledger)}
+                    </span>
+                  )}
                 </div>
+                {g.recipients && (
+                  <div className="muted small">
+                    May only pay: {g.recipients.map((r) => config?.recipients.find((x) => x.address === r)?.label ?? short(r)).join(", ")}
+                  </div>
+                )}
                 <div className="meter" aria-label={`${pct}% of allowance used`}>
                   <div className="fill" style={{ width: `${Math.min(pct, 100)}%` }} />
                 </div>
@@ -276,8 +414,125 @@ export default function App() {
         </div>
       </section>
 
+      <section className={`card ${account ? "" : "disabled"}`}>
+        <div className="step">5</div>
+        <div className="body">
+          <h2>Approval requests</h2>
+          {approvals === null ? (
+            <p className="muted">
+              Start the guardian service with <code>npm run guardian</code> to receive requests from your agent.
+            </p>
+          ) : approvals.length === 0 ? (
+            <p className="muted">
+              No requests. When a payment would exceed the allowance, the agent can ask you to approve that one
+              payment here.
+            </p>
+          ) : (
+            <ul className="requests">
+              {approvals.map((a) => {
+                const problem = account ? checkRequest(a, account) : "connect the wallet first";
+                return (
+                  <li key={a.id} className={`request ${a.status}`}>
+                    <div className="request-head">
+                      <span className="mono big">{a.amountUsdc} USDC</span>
+                      <span>to {a.merchant}</span>
+                      <span className="tag">{a.status}</span>
+                    </div>
+                    <div className="muted">
+                      “{a.reason}”
+                    </div>
+                    <div className="mono muted small">{a.url}</div>
+                    {a.status === "pending" &&
+                      (problem ? (
+                        <div className="banner error">Refusing to sign: {problem}</div>
+                      ) : (
+                        <div className="row">
+                          <button onClick={() => approveReq(a)} disabled={busy !== null}>
+                            {busy === `approve-${a.id}` ? "Waiting for passkey…" : "Approve with passkey"}
+                          </button>
+                          <button className="ghost" onClick={() => rejectReq(a)} disabled={busy !== null}>
+                            Reject
+                          </button>
+                        </div>
+                      ))}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section className={`card ${account ? "" : "disabled"}`}>
+        <div className="step">6</div>
+        <div className="body">
+          <h2>Private spending</h2>
+          <p className="muted">
+            Payments the agent settled confidentially. The public sees who paid whom, never how much. Your auditor
+            key decrypts the amounts on this computer.
+          </p>
+          {auditError && <p className="muted">Guardian service unavailable ({auditError}). Run <code>npm run guardian</code>.</p>}
+          {audit && (
+            <>
+              <table className="audit">
+                <thead>
+                  <tr>
+                    <th>Ledger</th>
+                    <th>Event</th>
+                    <th>Public sees</th>
+                    <th>You see</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.rows
+                    .filter((r) => r.type !== "register")
+                    .slice()
+                    .reverse()
+                    .map((r) => (
+                      <tr key={`${r.txHash}-${r.type}`}>
+                        <td className="mono">{r.ledger}</td>
+                        <td>
+                          {r.type === "transfer"
+                            ? `${nameOf(r.from)} → ${nameOf(r.to)}`
+                            : r.type === "merge"
+                              ? "merge into spendable"
+                              : `${r.type} ${nameOf(r.to)}`}
+                        </td>
+                        <td className="mono">{r.publicAmount !== null ? `${fmt(BigInt(r.publicAmount))} USDC` : "hidden"}</td>
+                        <td className="mono">
+                          {r.decryptedAmount
+                            ? `${fmt(BigInt(r.decryptedAmount))} USDC`
+                            : r.publicAmount !== null
+                              ? `${fmt(BigInt(r.publicAmount))} USDC`
+                              : audit.auditorKey
+                                ? "not decryptable"
+                                : "no auditor key"}
+                        </td>
+                        <td>
+                          <a href={explorer("tx", r.txHash)} target="_blank" rel="noreferrer" className="mono">
+                            {r.txHash.slice(0, 8)}…
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              <ul className="feed">
+                {Object.entries(audit.totalsTo).map(([to, total]) => (
+                  <li key={to}>
+                    <span>Total settled to {nameOf(to)}</span>
+                    <span className="mono">{fmt(BigInt(total))} USDC</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </section>
+
       <footer className="muted">
-        Built on OpenZeppelin smart accounts, x402 and Soroban. Testnet only.
+        Built on OpenZeppelin smart accounts, x402, Soroban and confidential tokens. Testnet only.
       </footer>
     </div>
   );

@@ -98,3 +98,18 @@ footer { text-align: center; font-size: 12px; margin-top: 28px; }
   .top { flex-direction: column; }
   .feed li { grid-template-columns: 1fr 1fr; }
 }
+
+/* approvals + private spending */
+.requests { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.request { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; }
+.request.pending { border-color: currentColor; }
+.request-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.small { font-size: 12px; overflow-wrap: anywhere; }
+.audit { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+.audit th, .audit td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.audit th { font-weight: 600; color: var(--muted); }
+@media (max-width: 640px) { .audit { display: block; overflow-x: auto; } }
+.allowlist { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 4px 0 12px; display: grid; gap: 6px; }
+.check { display: flex; gap: 8px; align-items: center; flex-direction: row; font-size: 14px; }
+.check.sub { padding-left: 24px; }
+.check input { width: auto; margin: 0; }
