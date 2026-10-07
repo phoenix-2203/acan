@@ -4,7 +4,7 @@
  *   AGENT_VAULT   classic account the agent controls; pays tabs from its
  *                 confidential balance (needs XLM for fees + a USDC trustline)
  *   AGENT_CT_SK   the vault's confidential spending secret
- *   MERCHANT_CT_SK the merchant's confidential secret (decrypts settlements)
+ *   MERCHANT_CT_SK / MERCHANT_B_CT_SK each merchant's confidential secret (decrypts settlements)
  *   CT_AUDITOR_SECRET the guardian's auditor key for this deployment
  *
  * Registers the vault and the merchant on the confidential token (each
@@ -33,6 +33,8 @@ async function main() {
   saveEnv({ AGENT_VAULT_ADDRESS: vault.publicKey() });
   const agentCt = secretFor("AGENT_CT_SK", () => toHex32(randomScalar()));
   const merchantCt = secretFor("MERCHANT_CT_SK", () => toHex32(randomScalar()));
+  const merchantBSecret = process.env.MERCHANT_B_SECRET;
+  const merchantBCt = merchantBSecret ? secretFor("MERCHANT_B_CT_SK", () => toHex32(randomScalar())) : undefined;
 
   step("Guardian auditor key");
   if (env.CT_AUDITOR_SECRET) {
@@ -54,10 +56,13 @@ async function main() {
   ok(`AGENT_VAULT ${vault.publicKey()} (trustline ${tl ? "added" : "already present"})`);
 
   step("Registering confidential accounts (generates a proof each)");
-  for (const [name, secret, ct] of [
+  const parties: [string, string, string][] = [
     ["agent vault", vaultSecret, agentCt],
-    ["merchant", merchantSecret, merchantCt],
-  ] as const) {
+    ["merchant A", merchantSecret, merchantCt],
+  ];
+  if (merchantBSecret && merchantBCt) parties.push(["merchant B", merchantBSecret, merchantBCt]);
+  else console.log("  SKIP  merchant B: run `npm run setup` first to create MERCHANT_B");
+  for (const [name, secret, ct] of parties) {
     const acct = new ConfidentialAccount({
       secret,
       ctSecretHex: ct,

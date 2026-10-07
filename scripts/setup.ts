@@ -2,7 +2,8 @@
  * One-time testnet setup. Safe to re-run: existing keys in .env are reused.
  *
  * Creates and funds (via Friendbot) three classic accounts:
- *   MERCHANT     receives x402 payments (needs a USDC trustline)
+ *   MERCHANT     merchant A, receives x402 payments (needs a USDC trustline)
+ *   MERCHANT_B   merchant B, a second seller with different prices
  *   FACILITATOR  pays settlement fees when FACILITATOR=local
  *   TREASURY     holds testnet USDC from Circle's faucet, used to top up the
  *                agent's smart account (needs a USDC trustline)
@@ -35,18 +36,19 @@ const ok = (msg: string) => console.log(`  PASS  ${msg}`);
 
 async function main() {
   const merchant = keyFor("MERCHANT");
+  const merchantB = keyFor("MERCHANT_B");
   const facilitator = keyFor("FACILITATOR");
   const treasury = keyFor("TREASURY");
   const agent = keyFor("AGENT");
 
   step("Funding classic accounts with testnet XLM (Friendbot)");
-  for (const [name, kp] of [["MERCHANT", merchant], ["FACILITATOR", facilitator], ["TREASURY", treasury]] as const) {
+  for (const [name, kp] of [["MERCHANT", merchant], ["MERCHANT_B", merchantB], ["FACILITATOR", facilitator], ["TREASURY", treasury]] as const) {
     await friendbot(kp.publicKey());
     ok(`${name} ${kp.publicKey()}`);
   }
 
   step("Adding USDC trustlines");
-  for (const [name, kp] of [["MERCHANT", merchant], ["TREASURY", treasury]] as const) {
+  for (const [name, kp] of [["MERCHANT", merchant], ["MERCHANT_B", merchantB], ["TREASURY", treasury]] as const) {
     const hash = await ensureUsdcTrustline(kp);
     ok(`${name} trustline ${hash ? `added (${hash.slice(0, 10)}…)` : "already present"}`);
   }
