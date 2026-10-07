@@ -54,9 +54,11 @@ export class AgentWallet {
   constructor(
     readonly mode: Mode,
     private readonly log: (line: string) => void = console.log,
+    /** Use this context rule instead of AGENT_RULE_ID (e.g. a task budget's rule). */
+    ruleId?: number,
   ) {
     this.smartAccount = requireEnv("SMART_ACCOUNT");
-    this.ruleId = Number(requireEnv("AGENT_RULE_ID"));
+    this.ruleId = ruleId ?? Number(requireEnv("AGENT_RULE_ID"));
     this.signer = new SmartAccountAgentSigner({
       smartAccount: this.smartAccount,
       agentSecret: requireEnv("AGENT_SECRET"),
@@ -174,6 +176,52 @@ export class AgentWallet {
       receipt: this.mode === "public" ? explorerTx(settle.transaction) : `voucher ${settle.transaction}`,
       data: await paid.json(),
     };
+  }
+
+  /**
+   * Ask the guardian for a budget for one task. If approved, the guardian's
+   * passkey creates a new context rule for this agent key: capped at `amount`
+   * in total, limited to `recipients`, and expiring after `minutes`. Returns
+   * the rule id, which a new AgentWallet can then pay under.
+   */
+  async requestBudget(req: {
+    amount: bigint;
+    minutes: number;
+    recipients: { address: string; label: string }[];
+    task: string;
+    reason: string;
+    timeoutMs?: number;
+  }): Promise<{ ok: true; ruleId: number } | { ok: false; reason: string }> {
+    const guardian = process.env.GUARDIAN_URL ?? "http://127.0.0.1:4030";
+    const created = await fetch(`${guardian}/budgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentKey: this.signer.agentAddress,
+        amount: req.amount.toString(),
+        minutes: req.minutes,
+        recipients: req.recipients,
+        task: req.task,
+        reason: req.reason,
+      }),
+    }).catch(() => null);
+    if (!created) return { ok: false, reason: "guardian service unreachable (npm run guardian)" };
+    if (!created.ok) return { ok: false, reason: `guardian refused the request: ${(await created.json()).error}` };
+    const { id } = await created.json();
+    const timeoutMs = req.timeoutMs ?? Number(process.env.APPROVAL_TIMEOUT_MS ?? 240_000);
+    const dashboard = process.env.DASHBOARD_URL ?? "http://localhost:5173";
+    this.log(
+      `   waiting up to ${Math.round(timeoutMs / 60_000)} min for the guardian to approve a budget of ` +
+        `${stroopsToUsdc(req.amount)} USDC for ${req.minutes} min (dashboard: ${dashboard})…`,
+    );
+    const end = Date.now() + timeoutMs;
+    for (;;) {
+      const b = await (await fetch(`${guardian}/budgets/${id}`)).json();
+      if (b.status === "approved") return { ok: true, ruleId: b.ruleId };
+      if (b.status !== "pending") return { ok: false, reason: `the guardian ${b.status} the budget` };
+      if (Date.now() > end) return { ok: false, reason: "the guardian did not answer in time" };
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
   }
 
   /**
