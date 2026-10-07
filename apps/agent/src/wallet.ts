@@ -286,7 +286,11 @@ export class AgentWallet {
         maxLedger: prepared.maxLedger,
       }),
     }).catch(() => null);
-    if (!created?.ok) return { ok: false, status: "error", url, priceUsdc, reason: "guardian service unreachable (npm run guardian)" };
+    if (!created) return { ok: false, status: "error", url, priceUsdc, reason: "guardian service unreachable (npm run guardian)" };
+    if (!created.ok) {
+      const why = await created.json().catch(() => ({}));
+      return { ok: false, status: "refused", url, priceUsdc, reason: `guardian refused the request: ${why.error ?? `HTTP ${created.status}`}` };
+    }
     const { id } = await created.json();
     const dashboard = process.env.DASHBOARD_URL ?? "http://localhost:5173";
     this.log(
