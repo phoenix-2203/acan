@@ -140,6 +140,31 @@ auditor ciphertexts. The guardian holds the auditor key for this deployment, so
 `npm run audit` shows exactly what the agent spent, while the public sees only
 "vault → merchant, amount hidden".
 
+### 4. More guardian controls
+
+All of these are enforced by the smart account on-chain, or checked in the
+guardian's own browser before the passkey signs anything.
+
+- **Expiring allowances.** The dashboard can set the rule's `valid_until`
+  ledger (1 hour, 1 day or 7 days). After it, the smart account refuses the
+  agent's key (`UnvalidatedContext`), with no further action.
+- **Merchant allowlist** (`contracts/merchant-allowlist-policy`). A Soroban
+  policy contract for OpenZeppelin smart accounts: the agent's rule may only
+  `transfer` to recipients the guardian picked (the two merchants and the
+  agent's own vault). It is installed next to the spending-limit policy in the
+  same passkey approval, so both must pass for every payment. Any other
+  recipient fails with `RecipientNotAllowed` (#3401).
+- **One-off approvals.** When the allowance blocks a purchase, the agent can
+  ask the guardian. The request appears in the dashboard (through the local
+  guardian service, `npm run guardian`). The dashboard decodes the
+  authorization entry itself and refuses to sign unless it is exactly the
+  claimed USDC transfer: right token, recipient and amount, from this account,
+  with no extra calls. The guardian then signs that single payment with their
+  passkey under their own rule, so the agent's allowance is unchanged.
+- **Private-spending panel.** The dashboard shows each confidential settlement
+  twice: what the public sees ("hidden") and what the guardian's auditor key
+  decrypts, locally on the guardian's machine.
+
 ---
 
 ## Run it yourself (testnet)
