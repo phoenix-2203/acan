@@ -303,3 +303,28 @@ fn smart_account_enforces_merchant_budgets_and_spending_limit_together() {
     // Above the overall limit: refused by the spending-limit policy (3221).
     assert_eq!(check(&vault, 1_200_000), err(3221));
 }
+
+/// Prints the XDR of a fixed params value; the dashboard's encoder test pins
+/// the same bytes, so the TypeScript and Rust encodings cannot drift apart.
+#[test]
+fn params_xdr_fixture() {
+    use soroban_sdk::xdr::ToXdr;
+    let e = Env::default();
+    let a = Address::from_str(&e, "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT");
+    let b = Address::from_str(&e, "CCV4VQTGJN6GUVNM4LN3JWOWBOOX3E7IGKJ6QUPKZVKMDNV7WEJXVYAQ");
+    let p = MerchantPolicyParams {
+        recipients: vec![&e, Recipient { address: a, cap: 500_000 }, Recipient { address: b, cap: 0 }],
+        period_ledgers: DAY,
+        max_payments: 10,
+    };
+    let bytes = p.to_xdr(&e);
+    let mut v = std::vec::Vec::new();
+    for i in 0..bytes.len() {
+        v.push(bytes.get_unchecked(i));
+    }
+    std::println!("FIXTURE {}", hex(&v));
+}
+
+fn hex(b: &[u8]) -> std::string::String {
+    b.iter().map(|x| std::format!("{:02x}", x)).collect()
+}
