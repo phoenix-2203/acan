@@ -7,10 +7,11 @@
  *   npm run agent:ai                         # default task, public payments
  *   npm run agent:ai -- --private            # pay with tab vouchers, settle confidentially
  *   npm run agent:ai -- "your task here" [--private]
+ *   npm run agent:ai -- --budget             # ask the guardian for a task budget first
  *
  * Model: GROQ_API_KEY (Groq), ANTHROPIC_API_KEY (Claude) or OLLAMA_MODEL (local) in .env.
  */
-import { loadEnv } from "@acan/core";
+import { loadEnv, requireEnv, stroopsToUsdc, usdcToStroops } from "@acan/core";
 import { createChat, type Tool, type ToolCall } from "./llm.js";
 import { AgentWallet, type Mode } from "./wallet.js";
 
@@ -18,6 +19,9 @@ loadEnv();
 
 const args = process.argv.slice(2);
 const mode: Mode = args.includes("--private") ? "private" : "public";
+/** Task-budget mode: start with no spending authority and ask the guardian for a budget for this task. */
+const budgetMode = args.includes("--budget");
+const MAX_BUDGET_USDC = Number(process.env.MAX_BUDGET_USDC ?? 1);
 const taskArg = args.filter((a) => !a.startsWith("--")).join(" ").trim();
 const MERCHANTS = (process.env.MERCHANT_URLS ?? "http://localhost:4021,http://localhost:4022")
   .split(",")
@@ -40,7 +44,27 @@ Rules:
 - If a purchase is blocked because the allowance is used up, do not retry it. If that item is essential to the task, you may call request_approval once for it, with a one-sentence reason the guardian will read; the guardian approves or rejects it with their passkey. Otherwise stop and explain.
 - When done, call finish with a short answer to the task, and list each purchase with its merchant and price.
 
-Payment mode for this run: ${mode === "private" ? "private (signed tab vouchers per request, settled later in confidential transfers whose amounts are hidden on-chain)" : "public (one on-chain USDC transfer per request)"}.`;
+${
+  budgetMode
+    ? `This run uses a TASK BUDGET. You start with no spending authority. First call list_merchants, work out which products the task needs and their total cost, then call request_budget once with that total plus a small margin (at most ${MAX_BUDGET_USDC} USDC), how many minutes the task needs (keep it short, e.g. 10), the merchants you will use, and a one-sentence reason. Only after it is approved, buy. The budget expires on its own.\n\n`
+    : ""
+}Payment mode for this run: ${mode === "private" ? "private (signed tab vouchers per request, settled later in confidential transfers whose amounts are hidden on-chain)" : "public (one on-chain USDC transfer per request)"}.`;
+
+const BUDGET_TOOL: Tool = {
+  name: "request_budget",
+  description:
+    "Ask the guardian for a spending budget for this task (task-budget mode only). Waits for their passkey approval. Returns whether it was approved.",
+  parameters: {
+    type: "object",
+    properties: {
+      amount_usdc: { type: "string", description: "Total budget in USDC, e.g. \"0.03\"" },
+      minutes: { type: "number", description: "How long the budget should last, in minutes" },
+      merchants: { type: "array", items: { type: "string" }, description: "Merchant base URLs exactly as listed" },
+      reason: { type: "string", description: "One sentence for the guardian: what the money is for" },
+    },
+    required: ["amount_usdc", "minutes", "merchants", "reason"],
+  },
+};
 
 const TOOLS: Tool[] = [
   {
@@ -98,7 +122,10 @@ const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const ts = () => new Date().toISOString().slice(11, 19);
 const log = (s: string) => console.log(`${dim(ts())} ${s}`);
 
-const wallet = new AgentWallet(mode, (l) => log(l));
+let wallet = new AgentWallet(mode, (l) => log(l));
+/** Set once the guardian approves a task budget; spending happens under this rule. */
+let budget: { ruleId: number; amountUsdc: string; minutes: number } | undefined;
+let budgetAsked = false;
 const spent: { merchant: string; path: string; price: string; receipt?: string }[] = [];
 const merchantsUsed = new Set<string>();
 let approvalsAsked = 0;
@@ -128,6 +155,10 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       return { output: JSON.stringify(list) };
     }
     case "check_budget": {
+      if (budgetMode && !budget) {
+        log("   no task budget yet");
+        return { output: JSON.stringify({ budget: "none yet: call request_budget first" }) };
+      }
       const a = await wallet.allowance();
       const vault = await wallet.vaultSpendable();
       log(`   allowance left ${a.remainingUsdc} of ${a.limitUsdc} USDC${vault ? `, private vault ${vault} USDC` : ""}`);
@@ -149,6 +180,10 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       }
       if (mode === "private" && !merchantsUsed.has(merchant)) await wallet.syncTab(merchant);
       const url = `${merchant}${path}${query ? `?${query}` : ""}`;
+      if (budgetMode && !budget) {
+        log(`   ${bold("REJECTED")} ${call.name} before a task budget was approved`);
+        return { output: JSON.stringify({ error: "no budget yet: call request_budget first" }) };
+      }
       if (call.name === "request_approval") {
         // Enforced here, not left to the prompt: approval is only for a purchase
         // the allowance actually refused, and only once per run.
@@ -176,6 +211,57 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       }
       return { output: JSON.stringify(r.ok ? { paidUsdc: r.priceUsdc, data: r.data } : { status: r.status, reason: r.reason }) };
     }
+    case "request_budget": {
+      if (!budgetMode) return { output: JSON.stringify({ error: "not in task-budget mode" }) };
+      if (budgetAsked) {
+        log(`   ${bold("REJECTED")} second budget request (one per run)`);
+        return { output: JSON.stringify({ error: "only one budget request per run" }) };
+      }
+      const amountText = String(call.input.amount_usdc ?? "").trim();
+      const minutes = Math.round(Number(call.input.minutes));
+      const urls = Array.isArray(call.input.merchants) ? call.input.merchants.map((u) => String(u).replace(/\/$/, "")) : [];
+      const bad = urls.filter((u) => !MERCHANTS.includes(u));
+      let amount: bigint;
+      try {
+        amount = usdcToStroops(amountText);
+      } catch {
+        return { output: JSON.stringify({ error: `amount_usdc must be a decimal like "0.03", got ${amountText}` }) };
+      }
+      if (amount <= 0n || amount > usdcToStroops(String(MAX_BUDGET_USDC))) {
+        return { output: JSON.stringify({ error: `amount must be between 0 and ${MAX_BUDGET_USDC} USDC` }) };
+      }
+      if (!Number.isFinite(minutes) || minutes < 1 || minutes > 24 * 60) {
+        return { output: JSON.stringify({ error: "minutes must be between 1 and 1440" }) };
+      }
+      if (urls.length === 0 || bad.length) {
+        return { output: JSON.stringify({ error: `merchants must be listed URLs; unknown: ${bad.join(", ") || "none given"}` }) };
+      }
+      for (const u of urls) if (!catalogs[u]) catalogs[u] = await (await fetch(u)).json();
+      const recipients = urls.map((u) => ({ address: String(catalogs[u].payTo), label: String(catalogs[u].name) }));
+      if (mode === "private") {
+        recipients.push({ address: requireEnv("AGENT_VAULT_ADDRESS"), label: "Agent's private vault (top-ups)" });
+      }
+      budgetAsked = true;
+      const r = await wallet.requestBudget({
+        amount,
+        minutes,
+        recipients,
+        task: TASK,
+        reason: String(call.input.reason ?? "").slice(0, 300) || "(no reason given)",
+      });
+      if (!r.ok) {
+        log(`   ${bold("BUDGET REFUSED")}: ${r.reason}`);
+        return { output: JSON.stringify({ approved: false, reason: r.reason }) };
+      }
+      await wallet.close();
+      wallet = new AgentWallet(mode, (l) => log(l), r.ruleId);
+      budget = { ruleId: r.ruleId, amountUsdc: stroopsToUsdc(amount), minutes };
+      log(
+        `   ${bold("BUDGET APPROVED")} with the guardian's passkey: rule #${r.ruleId}, ` +
+          `${budget.amountUsdc} USDC, expires in ${minutes} min, only ${recipients.map((x) => x.label).join(", ")}`,
+      );
+      return { output: JSON.stringify({ approved: true, amountUsdc: budget.amountUsdc, minutes }) };
+    }
     case "finish":
       return { output: "ok", done: String(call.input.answer ?? "") };
     default:
@@ -184,11 +270,15 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
 }
 
 async function main() {
-  const chat = createChat(SYSTEM, TOOLS);
-  console.log(bold(`ACAN AI agent  (${chat.label}, ${mode} payments)`));
-  console.log(`smart account ${wallet.smartAccount}, rule ${wallet.ruleId}`);
-  const a = await wallet.allowance();
-  console.log(`allowance left ${a.remainingUsdc} of ${a.limitUsdc} USDC this period\n`);
+  const chat = createChat(SYSTEM, budgetMode ? [...TOOLS, BUDGET_TOOL] : TOOLS);
+  console.log(bold(`ACAN AI agent  (${chat.label}, ${mode} payments${budgetMode ? ", task budget" : ""})`));
+  if (budgetMode) {
+    console.log(`smart account ${wallet.smartAccount}; no spending authority until the guardian approves a task budget\n`);
+  } else {
+    console.log(`smart account ${wallet.smartAccount}, rule ${wallet.ruleId}`);
+    const a = await wallet.allowance();
+    console.log(`allowance left ${a.remainingUsdc} of ${a.limitUsdc} USDC this period\n`);
+  }
   console.log(`${bold("Task:")} ${TASK}\n`);
   chat.say(TASK);
 
@@ -245,8 +335,14 @@ async function main() {
         "The guardian can decrypt them with `npm run audit`.",
     );
   }
-  const after = await wallet.allowance();
-  console.log(`allowance left ${after.remainingUsdc} of ${after.limitUsdc} USDC`);
+  if (!budgetMode || budget) {
+    const after = await wallet.allowance();
+    console.log(
+      budget
+        ? `task budget left ${after.remainingUsdc} of ${after.limitUsdc} USDC (rule #${budget.ruleId} expires on its own)`
+        : `allowance left ${after.remainingUsdc} of ${after.limitUsdc} USDC`,
+    );
+  }
   if (failure) process.exitCode = 1;
 }
 
