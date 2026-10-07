@@ -1,2 +1,5 @@
-// Browser-safe subset (no node:fs).
+// Browser-safe subset (no node:fs, no x402 server code).
 export * from "./config.js";
+export * from "./errors.js";
+export * from "./agent-signer.js";
+export * from "./smart-account-transfer.js";

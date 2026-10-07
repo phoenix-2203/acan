@@ -1,7 +1,7 @@
 import { Keypair, contract, nativeToScVal, rpc } from "@stellar/stellar-sdk";
 import { ASSETS, TESTNET } from "./config.js";
 import { SmartAccountAgentSigner, entryAddress } from "./agent-signer.js";
-import { PaymentRejectedError, describeSimulationError } from "./x402-smart-account-scheme.js";
+import { PaymentRejectedError, describeSimulationError } from "./errors.js";
 
 /**
  * Move tokens out of the guardian's smart account using the agent's key.

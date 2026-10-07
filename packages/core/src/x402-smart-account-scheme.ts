@@ -13,6 +13,10 @@ import {
 } from "@x402/stellar";
 import type { PaymentPayload, PaymentRequirements, SchemeNetworkClient } from "@x402/core/types";
 import { SmartAccountAgentSigner, entryAddress } from "./agent-signer.js";
+import { PaymentRejectedError, describeSimulationError } from "./errors.js";
+
+// Error decoding lives in a browser-safe module; re-exported for existing imports.
+export { PaymentRejectedError, describeSimulationError, contractErrorCode } from "./errors.js";
 
 /**
  * x402 "exact" scheme client for payers that are OpenZeppelin smart accounts.
@@ -137,43 +141,6 @@ export async function prepareSmartAccountPayment(
         : built.toXDR();
     },
   };
-}
-
-/** Raised when the smart account's own rules refuse a payment. */
-export class PaymentRejectedError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
-    super(message);
-    this.name = "PaymentRejectedError";
-  }
-}
-
-/**
- * Known OpenZeppelin smart-account contract error codes
- * (smart-account-kit CONTRACT_ERROR_REGISTRY: SmartAccount 3000-3016, SpendingLimit 3220-3227).
- */
-const KNOWN_CODES: Record<number, string> = {
-  3000: "ContextRuleNotFound: the agent's allowance was revoked",
-  3002: "UnvalidatedContext: no active allowance covers this payment (revoked or expired)",
-  3003: "ExternalVerificationFailed: the agent's signature was not accepted",
-  3016: "UnauthorizedSigner: this key is not authorized on the smart account",
-  3223: "NotAllowed: the spending-limit policy only allows token transfers",
-  3401: "RecipientNotAllowed: this recipient is not on the guardian's merchant allowlist",
-  3400: "NotInstalled: the merchant budget policy is not installed for this rule",
-  3402: "NotAllowed: the merchant budget policy only allows token transfers",
-  3406: "RecipientCapExceeded: this merchant's own cap for the period is used up",
-  3407: "TooManyPayments: the payment-count limit for the period is reached",
-  3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
-  3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
-};
-
-export function describeSimulationError(err: unknown): string {
-  const text = err instanceof Error ? err.message : String(err);
-  const m = text.match(/Error\(Contract, #(\d+)\)/);
-  if (m) {
-    const code = Number(m[1]);
-    return KNOWN_CODES[code] ?? `Contract error #${code}`;
-  }
-  return text.split("\n")[0].slice(0, 300);
 }
 
 function validateRequirements(req: PaymentRequirements): void {
