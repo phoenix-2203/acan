@@ -300,16 +300,17 @@ export default function App() {
           <h2>Run the full stack</h2>
           <p className="muted">
             The sandbox shows the on-chain guard rails. The repository adds the rest: x402 merchants, the AI agent (Groq, Claude or
-            Ollama), private tabs, guardian approvals and the dashboard.
+            Ollama), private tabs, guardian approvals and the dashboard. The README has the full steps.
           </p>
           <pre>
             <code>{`git clone ${REPO_URL}
 cd acan && npm install
-npm run setup          # testnet accounts, USDC, smart account
+npm run setup          # testnet accounts for merchant, facilitator, treasury (.env)
+npm run web            # dashboard: create the passkey smart account, authorize the agent
 npm run merchant       # x402 merchant A   (and: npm run merchant:b)
 npm run guardian       # approvals + audit service
-npm run web            # guardian dashboard (passkey)
-npm run agent:ai       # the AI agent shops within its allowance`}</code>
+npm run agent:ai       # the AI agent shops within its allowance
+npm run mcp            # or: let any MCP client (Claude Desktop, Cursor) shop with it`}</code>>
           </pre>
         </section>
       </main>
