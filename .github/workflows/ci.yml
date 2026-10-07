@@ -44,11 +44,19 @@ jobs:
           workspaces: contracts
       - name: Tests
         run: cargo test --manifest-path contracts/Cargo.toml
-      - name: Build wasm
+      - name: Install stellar CLI (same version used for the testnet deploy)
+        run: |
+          mkdir -p "$HOME/stellar-cli"
+          curl -sSfL https://github.com/stellar/stellar-cli/releases/download/v28.1.0/stellar-cli-28.1.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$HOME/stellar-cli"
+          dirname "$(find "$HOME/stellar-cli" -type f -name stellar | head -1)" >> "$GITHUB_PATH"
+      - name: Build wasm with stellar contract build
         shell: bash
         run: |
           set -o pipefail
-          if ! cargo build --manifest-path contracts/Cargo.toml --release --target wasm32v1-none 2>&1 | tee build.log; then
+          stellar --version
+          # soroban-sdk's spec shaking requires building through the stellar CLI.
+          if ! stellar contract build --manifest-path contracts/Cargo.toml 2>&1 | tee build.log; then
             # Surface the compiler error as an annotation (readable without the raw logs).
             echo "::error title=wasm build failed::$(tail -n 25 build.log | tr '\n' ' ' | cut -c1-4000)"
             exit 1
