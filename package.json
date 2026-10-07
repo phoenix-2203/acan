@@ -28,6 +28,7 @@
     "audit": "tsx scripts/audit.ts",
     "guardian": "tsx scripts/guardian.ts",
     "allowlist:deploy": "tsx scripts/deploy-allowlist.ts",
+    "deployment:publish": "tsx scripts/publish-deployment.ts",
     "demo:allowlist": "tsx scripts/demo-allowlist.ts",
     "demo:caps": "tsx scripts/demo-caps.ts",
     "merchant:cashout": "tsx scripts/merchant-cashout.ts",
