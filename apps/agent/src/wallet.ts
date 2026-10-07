@@ -16,7 +16,9 @@ import {
   SmartAccountExactStellarScheme,
   TESTNET,
   TabClientScheme,
+  attachPaymentIdentifier,
   explorerTx,
+  fetchPaid,
   prepareSmartAccountPayment,
   requireEnv,
   spendingLimitState,
@@ -156,7 +158,16 @@ export class AgentWallet {
       return { ok: false, status: "error", url, priceUsdc, scheme, reason: err instanceof Error ? err.message : String(err) };
     }
 
-    const paid = await fetch(url, { headers: this.http.encodePaymentSignatureHeader(payload) });
+    // Tag the payment so a retry after a lost response is replayed by the
+    // merchant instead of charged twice (x402 payment-identifier extension).
+    attachPaymentIdentifier(payload, required);
+    let paid: Response;
+    try {
+      paid = await fetchPaid(url, this.http.encodePaymentSignatureHeader(payload));
+    } catch (err) {
+      return { ok: false, status: "error", url, priceUsdc, scheme, reason: `merchant unreachable after paying: ${err instanceof Error ? err.message : err}` };
+    }
+    if (paid.headers.get("x-acan-replay")) this.log("   response was lost in transit; the merchant replayed it (charged once)");
     if (paid.status !== 200) {
       let reason = `HTTP ${paid.status}`;
       try {
@@ -292,13 +303,14 @@ export class AgentWallet {
     } catch (err) {
       return { ok: false, status: "error", url, priceUsdc, reason: err instanceof Error ? err.message : String(err) };
     }
-    const header = this.http.encodePaymentSignatureHeader({
+    const approvedPayload = {
       x402Version: required.x402Version,
       resource: required.resource,
       accepted: req,
       payload: { transaction },
-    });
-    const paid = await fetch(url, { headers: header });
+    } as Parameters<x402HTTPClient["encodePaymentSignatureHeader"]>[0];
+    attachPaymentIdentifier(approvedPayload, required);
+    const paid = await fetchPaid(url, this.http.encodePaymentSignatureHeader(approvedPayload));
     if (paid.status !== 200) return { ok: false, status: "refused", url, priceUsdc, reason: `merchant answered HTTP ${paid.status}` };
     const settle = this.http.getPaymentSettleResponse((n) => paid.headers.get(n));
     return { ok: true, status: "paid", url, priceUsdc, scheme: "exact (guardian-approved)", receipt: explorerTx(settle.transaction), data: await paid.json() };
