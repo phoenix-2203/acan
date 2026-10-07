@@ -6,3 +6,9 @@ dist/
 *.log
 .DS_Store
 target/
+*.tgz
+vendor/ctd-demo/packages/sdk/package-lock.json
+.sync/
+.acan/
+vendor/bb-crs/
+vendor/ctd/

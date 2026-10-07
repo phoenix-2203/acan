@@ -3,3 +3,6 @@ export * from "./agent-signer.js";
 export * from "./x402-smart-account-scheme.js";
 export * from "./env.js";
 export * from "./stellar.js";
+export * from "./facilitator.js";
+export * from "./smart-account-transfer.js";
+export * from "./tab/index.js";

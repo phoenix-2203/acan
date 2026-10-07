@@ -84,6 +84,17 @@ async function buyOnce(i: number): Promise<"paid" | "blocked" | "error"> {
   const paid = await fetch(ENDPOINT, { headers: http.encodePaymentSignatureHeader(payload) });
   if (paid.status !== 200) {
     console.log(`[${ts()}] #${i} merchant refused payment: HTTP ${paid.status} ${(await paid.text()).slice(0, 300)}`);
+    // The x402 server puts the facilitator's verify/settle failure reason in headers.
+    try {
+      const pr = http.getPaymentRequiredResponse((name) => paid.headers.get(name));
+      if (pr.error) console.log(`          reason: ${pr.error}`);
+    } catch {
+      /* no PAYMENT-REQUIRED header */
+    }
+    for (const h of ["PAYMENT-RESPONSE", "X-PAYMENT-RESPONSE"]) {
+      const v = paid.headers.get(h);
+      if (v) console.log(`          ${h}: ${Buffer.from(v, "base64").toString("utf8").slice(0, 500)}`);
+    }
     return "error";
   }
   const body = await paid.json();

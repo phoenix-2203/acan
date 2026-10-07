@@ -1,0 +1,1 @@
+upstream: https://github.com/brozorec/stellar-confidential-token-demo @ 9500ed774b13b08b5fe99370b60de3479edb492b (MIT). Patched: scripts/deploy.ts (CTD_UNDERLYING).

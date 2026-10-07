@@ -77,7 +77,7 @@ export async function grantAgent(agentKey: string, limitStroops: bigint, periodL
     new Map([[OZ_SMART_ACCOUNT.spendingLimitPolicy, policyParams]]),
   );
   const simulated = tx.result as ContextRule | undefined;
-  const result = await kit.signAndSubmit(tx);
+  const result = await kit.signAndSubmitAdmin(tx);
   if (!result.success) throw new Error(result.error?.message ?? "Rule creation failed");
 
   const ruleId = typeof simulated?.id === "number" ? simulated.id : (await kit.rules.count()) - 1;
@@ -97,7 +97,7 @@ export async function revokeAgent(ruleId: number): Promise<void> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
   const tx = await kit.rules.remove(ruleId);
-  const result = await kit.signAndSubmit(tx);
+  const result = await kit.signAndSubmitAdmin(tx);
   if (!result.success) throw new Error(result.error?.message ?? "Revoke failed");
   saveGrants(account, loadGrants(account).filter((g) => g.ruleId !== ruleId));
 }

@@ -11,13 +11,19 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test packages/core/test/*.test.ts",
+    "test": "node --import tsx --test packages/core/test/*.test.ts packages/confidential/test/*.test.ts",
     "setup": "tsx scripts/setup.ts",
     "fund:usdc": "tsx scripts/fund-usdc.ts",
     "status": "tsx scripts/status.ts",
     "merchant": "tsx apps/merchant/src/server.ts",
     "agent": "tsx apps/agent/src/agent.ts",
-    "web": "npm run dev -w @acan/web"
+    "web": "npm run dev -w @acan/web",
+    "diagnose": "tsx scripts/diagnose.ts",
+    "agent:private": "tsx apps/agent/src/agent-private.ts",
+    "ct:setup": "tsx scripts/ct-setup.ts",
+    "audit": "tsx scripts/audit.ts",
+    "merchant:cashout": "tsx scripts/merchant-cashout.ts",
+    "ct:build": "cd vendor/ctd-demo && pnpm install && pnpm build:sdk"
   },
   "overrides": {
     "@stellar/stellar-sdk": "16.3.1"

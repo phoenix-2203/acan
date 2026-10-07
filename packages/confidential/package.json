@@ -1,0 +1,16 @@
+{
+  "name": "@acan/confidential",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Confidential settlement for ACAN tabs, built on the OpenZeppelin confidential token preview (vendored demo SDK).",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@acan/core": "0.1.0",
+    "@stellar/stellar-sdk": "16.3.1"
+  }
+}
