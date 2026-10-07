@@ -78,6 +78,7 @@ export class AgentWallet {
       this.vault = new ConfidentialVault(this.account, {
         vaultKeypair: this.vaultKp,
         signer: this.signer,
+        // TOPUP_CHUNK_USDC=0 tops up exactly what is needed: nothing idle in the vault.
         chunk: usdcToStroops(process.env.TOPUP_CHUNK_USDC ?? "0.10"),
         onEvent: (e) => this.onVaultEvent(e),
       });
@@ -98,6 +99,7 @@ export class AgentWallet {
   private onVaultEvent(e: VaultEvent): void {
     if (e.kind === "topup-start") this.log(`   vault top-up: pulling ${stroopsToUsdc(e.amount)} USDC from the smart account (policy-checked)`);
     if (e.kind === "topup-pulled") this.log(`   top-up ${explorerTx(e.tx)}`);
+    if (e.kind === "returned") this.log(`   returned ${stroopsToUsdc(e.amount)} USDC from the vault to the smart account ${explorerTx(e.tx)}`);
     if (e.kind === "transfer") {
       this.settlements.push(e.tx);
       this.log(`   CONFIDENTIAL TRANSFER (amount hidden on-chain) ${explorerTx(e.tx)}`);
@@ -320,6 +322,13 @@ export class AgentWallet {
     if (!r.ok) throw new Error(`${info.name} did not credit the settlement: ${body.error}`);
     this.tab.recordSettlement(info.payTo, tx, due, BigInt(body.settled));
     return tx;
+  }
+
+  /** Private mode: send everything left in the vault back to the guardian's smart account. */
+  async returnUnused(): Promise<{ amountUsdc: string; tx: string } | null> {
+    if (!this.vault) return null;
+    const r = await this.vault.returnUnused(this.smartAccount);
+    return r ? { amountUsdc: stroopsToUsdc(r.amount), tx: r.tx } : null;
   }
 
   async close(): Promise<void> {

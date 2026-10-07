@@ -23,6 +23,7 @@
     "agent:private": "tsx apps/agent/src/agent-private.ts",
     "agent:ai": "tsx apps/agent/src/agent-ai.ts",
     "agent:settle": "tsx apps/agent/src/settle-tabs.ts",
+    "agent:return": "tsx apps/agent/src/return-vault.ts",
     "ct:setup": "tsx scripts/ct-setup.ts",
     "audit": "tsx scripts/audit.ts",
     "guardian": "tsx scripts/guardian.ts",
