@@ -1,16 +1,22 @@
 /**
- * ACAN demo merchant: a paid API protected by the standard x402 Express
- * middleware, settled in USDC on Stellar testnet.
+ * ACAN demo merchant: paid data APIs protected by the standard x402 Express
+ * middleware, settled on Stellar testnet.
  *
- * Nothing here is ACAN-specific: any x402 client can pay it. That is the
- * point. ACAN agents pay from a guarded smart account, merchants need no
- * changes.
+ * Two merchant profiles with different prices run from this file, so an agent
+ * has a real choice to make:
+ *   npm run merchant     profile "a", Northwind Data, port 4021
+ *   npm run merchant:b   profile "b", Southgate Data, port 4022
  *
- * FACILITATOR=public (default) uses the Coinbase-operated facilitator at
- * x402.org. FACILITATOR=local runs the same @x402/stellar facilitator code
- * in-process, paying fees from FACILITATOR_SECRET. Smart-account payments
- * need local mode: the public facilitator's 50,000-stroop fee ceiling and its
- * "only transfer events" rule both reject them (see packages/core/src/facilitator.ts).
+ * Every paid route accepts two x402 schemes:
+ *   exact     a USDC transfer per request (any x402 Stellar client can pay)
+ *   acan-tab  a signed voucher per request, settled in batches by
+ *             confidential transfer (needs `npm run ct:setup`)
+ *
+ * FACILITATOR=local (the default here) runs the facilitator in-process,
+ * paying fees from FACILITATOR_SECRET. Smart-account payers need it: the
+ * public facilitator's 50,000-stroop fee ceiling and "only transfer events"
+ * rule both reject them (see packages/core/src/facilitator.ts).
+ * FACILITATOR=public uses x402.org for `exact` only.
  */
 import express from "express";
 import { paymentMiddlewareFromConfig } from "@x402/express";
@@ -18,6 +24,8 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { ExactStellarScheme as ExactStellarServer } from "@x402/stellar/exact/server";
 import { createEd25519Signer } from "@x402/stellar";
+import { rpc } from "@stellar/stellar-sdk";
+import { StrKey } from "@stellar/stellar-sdk";
 import {
   SmartAccountAwareFacilitator,
   TESTNET,
@@ -26,99 +34,129 @@ import {
   TabServerScheme,
   loadEnv,
   requireEnv,
+  stroopsToUsdc,
   tabToJson,
+  tokenBalance,
   usdcToStroops,
 } from "@acan/core";
 import { CONFIDENTIAL_TESTNET, ConfidentialAccount, MerchantInbox } from "@acan/confidential";
 
 loadEnv();
 
-const PORT = Number(process.env.MERCHANT_PORT ?? 4021);
-const PAY_TO = requireEnv("MERCHANT_ADDRESS");
-const PRICE = process.env.PRICE_USD ?? "$0.01";
-const MODE = (process.env.FACILITATOR ?? "public").toLowerCase();
-
-function facilitatorClient() {
-  if (MODE === "local") {
-    const signer = createEd25519Signer(requireEnv("FACILITATOR_SECRET"), TESTNET.x402Network);
-    const fac = new x402Facilitator().register(
-      TESTNET.x402Network,
-      new SmartAccountAwareFacilitator([signer], {
-        rpcConfig: { url: TESTNET.rpcUrl },
-        // A smart-account payment runs the account's __check_auth, the
-        // Ed25519 verifier and the stateful spending-limit policy, so its
-        // simulated resource fee (~0.23 XLM on testnet, mostly refundable
-        // rent/write budget) is far above the public facilitator's 50,000
-        // stroop ceiling. This facilitator allows up to 1 XLM by default.
-        maxTransactionFeeStroops: Number(process.env.FACILITATOR_MAX_FEE_STROOPS ?? 10_000_000),
-      }),
-    );
-    return fac as unknown as HTTPFacilitatorClient;
-  }
-  return new HTTPFacilitatorClient({ url: process.env.FACILITATOR_URL ?? TESTNET.facilitatorUrl });
+interface Product {
+  path: string;
+  description: string;
+  price: string;
 }
 
-const app = express();
+const PROFILES = {
+  a: {
+    name: "Northwind Data",
+    env: "MERCHANT",
+    port: 4021,
+    tabs: ".acan/merchant-tabs.json",
+    products: [
+      { path: "/api/insight", description: "One short fact about Stellar or x402", price: "$0.01" },
+      { path: "/api/ledger", description: "Latest Stellar testnet ledger: sequence and protocol version", price: "$0.01" },
+      { path: "/api/balance", description: "USDC balance of a Stellar account (?account=G... or C...)", price: "$0.02" },
+    ],
+  },
+  b: {
+    name: "Southgate Data",
+    env: "MERCHANT_B",
+    port: 4022,
+    tabs: ".acan/merchant-b-tabs.json",
+    products: [
+      { path: "/api/insight", description: "One short fact about Stellar or x402", price: "$0.02" },
+      { path: "/api/ledger", description: "Latest Stellar testnet ledger: sequence and protocol version", price: "$0.005" },
+      { path: "/api/balance", description: "USDC balance of a Stellar account (?account=G... or C...)", price: "$0.03" },
+    ],
+  },
+} satisfies Record<string, { name: string; env: string; port: number; tabs: string; products: Product[] }>;
 
-const INSIGHTS = [
-  "Stellar closes a ledger roughly every 5 seconds.",
-  "x402 uses HTTP status 402 (Payment Required) to ask a client for payment.",
-  "Soroban auth lets a payer and a fee-sponsor be different accounts.",
-  "Settling a tab in one transfer costs one network fee instead of one per request.",
-];
-let served = 0;
+const PROFILE_ID = (process.env.MERCHANT_PROFILE ?? "a").toLowerCase() as keyof typeof PROFILES;
+const profile = PROFILES[PROFILE_ID];
+if (!profile) throw new Error(`Unknown MERCHANT_PROFILE ${PROFILE_ID} (use a or b)`);
 
-// ---- Milestone B: private route paid with tab vouchers + confidential settlement ----
-const PRIVATE_PRICE = process.env.PRIVATE_PRICE_USD ?? "$0.01";
+const PORT = Number(process.env[`${profile.env}_PORT`] ?? profile.port);
+const PAY_TO = requireEnv(`${profile.env}_ADDRESS`);
+const MODE = (process.env.FACILITATOR ?? "local").toLowerCase();
 const CREDIT_LIMIT = usdcToStroops(process.env.TAB_CREDIT_LIMIT_USDC ?? "0.03");
-const PRIVATE_ENABLED = Boolean(process.env.MERCHANT_CT_SK);
+const CT_SK = process.env[`${profile.env}_CT_SK`];
+const PRIVATE_ENABLED = MODE === "local" && Boolean(CT_SK);
+
 let tabFacilitator: TabFacilitatorScheme | undefined;
 let tabLedger: TabLedger | undefined;
 
-if (PRIVATE_ENABLED) {
-  const merchantCt = new ConfidentialAccount({
-    secret: requireEnv("MERCHANT_SECRET"),
-    ctSecretHex: requireEnv("MERCHANT_CT_SK"),
-    statePath: `.acan/ct-${PAY_TO}.json`,
-  });
-  tabLedger = new TabLedger(".acan/merchant-tabs.json");
-  tabFacilitator = new TabFacilitatorScheme(tabLedger, new MerchantInbox(merchantCt), PAY_TO);
-  const fac = new x402Facilitator().register(TESTNET.x402Network, tabFacilitator);
-  app.use(express.json());
-  app.use(
-    paymentMiddlewareFromConfig(
-      {
-        "GET /api/insight-private": {
-          accepts: { scheme: "acan-tab", price: PRIVATE_PRICE, network: TESTNET.x402Network, payTo: PAY_TO },
-          description: "One market insight, paid on a tab settled confidentially",
-        },
-      },
-      fac as unknown as HTTPFacilitatorClient,
-      [
-        {
-          network: TESTNET.x402Network,
-          server: new TabServerScheme({
-            confidentialToken: CONFIDENTIAL_TESTNET.contracts.token,
-            underlying: CONFIDENTIAL_TESTNET.contracts.underlying,
-            decimals: CONFIDENTIAL_TESTNET.decimals,
-            creditLimit: CREDIT_LIMIT,
-            tabUrl: "/tab",
-          }),
-        },
-      ],
-    ),
+function facilitatorClient(): HTTPFacilitatorClient {
+  if (MODE !== "local") {
+    return new HTTPFacilitatorClient({ url: process.env.FACILITATOR_URL ?? TESTNET.facilitatorUrl });
+  }
+  const signer = createEd25519Signer(requireEnv("FACILITATOR_SECRET"), TESTNET.x402Network);
+  const fac = new x402Facilitator().register(
+    TESTNET.x402Network,
+    new SmartAccountAwareFacilitator([signer], {
+      rpcConfig: { url: TESTNET.rpcUrl },
+      // A smart-account payment runs __check_auth, the Ed25519 verifier and
+      // the stateful spending-limit policy: its simulated resource fee (~0.23
+      // XLM on testnet, mostly refundable) is far above the public
+      // facilitator's 50,000-stroop ceiling. Allow up to 1 XLM by default.
+      maxTransactionFeeStroops: Number(process.env.FACILITATOR_MAX_FEE_STROOPS ?? 10_000_000),
+    }),
   );
+  if (PRIVATE_ENABLED) {
+    const merchantCt = new ConfidentialAccount({
+      secret: requireEnv(`${profile.env}_SECRET`),
+      ctSecretHex: CT_SK!,
+      statePath: `.acan/ct-${PAY_TO}.json`,
+    });
+    tabLedger = new TabLedger(profile.tabs);
+    tabFacilitator = new TabFacilitatorScheme(tabLedger, new MerchantInbox(merchantCt), PAY_TO);
+    fac.register(TESTNET.x402Network, tabFacilitator);
+  }
+  return fac as unknown as HTTPFacilitatorClient;
 }
+
+const app = express();
+app.use(express.json());
+const facilitator = facilitatorClient();
+
+const accepts = (price: string) => [
+  { scheme: "exact", price, network: TESTNET.x402Network, payTo: PAY_TO },
+  ...(PRIVATE_ENABLED ? [{ scheme: "acan-tab", price, network: TESTNET.x402Network, payTo: PAY_TO }] : []),
+];
+
+const routes = Object.fromEntries(
+  profile.products.map((p) => [`GET ${p.path}`, { accepts: accepts(p.price), description: p.description }]),
+);
+// Backwards-compatible alias used by earlier versions of the private agent.
+routes["GET /api/insight-private"] = {
+  accepts: accepts(profile.products[0].price).filter((a) => a.scheme === "acan-tab"),
+  description: profile.products[0].description,
+};
+if (!PRIVATE_ENABLED) delete routes["GET /api/insight-private"];
+
+/** Free catalog: what this merchant sells and at what price. */
+app.get("/", (_req, res) => {
+  res.json({
+    name: profile.name,
+    network: TESTNET.x402Network,
+    payTo: PAY_TO,
+    schemes: PRIVATE_ENABLED ? ["exact", "acan-tab"] : ["exact"],
+    creditLimitUsdc: PRIVATE_ENABLED ? stroopsToUsdc(CREDIT_LIMIT) : undefined,
+    products: profile.products,
+  });
+});
 
 /** A payer's tab as the merchant sees it (unpaid, read-only). */
 app.get("/tab/:payer", (req, res) => {
-  if (!tabLedger) return void res.status(404).json({ error: "private route not enabled" });
+  if (!tabLedger) return void res.status(404).json({ error: "private payments not enabled" });
   res.json(tabToJson(tabLedger.get(req.params.payer)));
 });
 
 /** Report a confidential settlement made outside a paid request (closing a tab). */
 app.post("/tab/settle", async (req, res) => {
-  if (!tabFacilitator) return void res.status(404).json({ error: "private route not enabled" });
+  if (!tabFacilitator) return void res.status(404).json({ error: "private payments not enabled" });
   const { payer, txHash } = (req.body ?? {}) as { payer?: string; txHash?: string };
   if (typeof payer !== "string" || typeof txHash !== "string") {
     return void res.status(400).json({ error: "body must be {payer, txHash}" });
@@ -130,39 +168,63 @@ app.post("/tab/settle", async (req, res) => {
   }
 });
 
-app.get("/", (_req, res) => {
-  res.json({
-    name: "ACAN demo merchant",
-    paidRoute: "GET /api/insight",
-    price: PRICE,
-    network: TESTNET.x402Network,
-    payTo: PAY_TO,
-    facilitator: MODE,
-    privateRoute: PRIVATE_ENABLED
-      ? { route: "GET /api/insight-private", scheme: "acan-tab", price: PRIVATE_PRICE, creditLimit: CREDIT_LIMIT.toString() }
-      : "disabled (run npm run ct:setup)",
-  });
-});
-
 app.use(
-  paymentMiddlewareFromConfig(
-    {
-      "GET /api/insight": {
-        accepts: { scheme: "exact", price: PRICE, network: TESTNET.x402Network, payTo: PAY_TO },
-        description: "One market insight",
-      },
-    },
-    facilitatorClient(),
-    [{ network: TESTNET.x402Network, server: new ExactStellarServer() }],
-  ),
+  paymentMiddlewareFromConfig(routes, facilitator, [
+    { network: TESTNET.x402Network, server: new ExactStellarServer() },
+    ...(PRIVATE_ENABLED
+      ? [
+          {
+            network: TESTNET.x402Network,
+            server: new TabServerScheme({
+              confidentialToken: CONFIDENTIAL_TESTNET.contracts.token,
+              underlying: CONFIDENTIAL_TESTNET.contracts.underlying,
+              decimals: CONFIDENTIAL_TESTNET.decimals,
+              creditLimit: CREDIT_LIMIT,
+              tabUrl: "/tab",
+            }),
+          },
+        ]
+      : []),
+  ]),
 );
 
-const serveInsight = (_req: express.Request, res: express.Response) => {
-  const insight = INSIGHTS[served++ % INSIGHTS.length];
-  res.json({ insight, servedAt: new Date().toISOString() });
+// ---- the data products (served only after payment) ----
+
+const INSIGHTS = [
+  "Stellar closes a ledger roughly every 5 seconds.",
+  "x402 uses HTTP status 402 (Payment Required) to ask a client for payment.",
+  "Soroban auth lets a payer and a fee-sponsor be different accounts.",
+  "Settling a tab in one transfer costs one network fee instead of one per request.",
+];
+let served = 0;
+const insight = (_req: express.Request, res: express.Response) => {
+  res.json({ merchant: profile.name, insight: INSIGHTS[served++ % INSIGHTS.length], servedAt: new Date().toISOString() });
 };
-app.get("/api/insight", serveInsight);
-app.get("/api/insight-private", serveInsight);
+app.get("/api/insight", insight);
+app.get("/api/insight-private", insight);
+
+const server = new rpc.Server(TESTNET.rpcUrl);
+app.get("/api/ledger", async (_req, res) => {
+  try {
+    const l = await server.getLatestLedger();
+    res.json({ merchant: profile.name, network: "testnet", sequence: l.sequence, protocolVersion: l.protocolVersion });
+  } catch (e) {
+    res.status(502).json({ error: `RPC unavailable: ${e instanceof Error ? e.message : e}` });
+  }
+});
+
+app.get("/api/balance", async (req, res) => {
+  const account = String(req.query.account ?? "");
+  if (!StrKey.isValidEd25519PublicKey(account) && !StrKey.isValidContract(account)) {
+    return void res.status(400).json({ error: "pass ?account=G... or C..." });
+  }
+  try {
+    const bal = await tokenBalance(account);
+    res.json({ merchant: profile.name, account, asset: "USDC", balance: stroopsToUsdc(bal) });
+  } catch (e) {
+    res.status(502).json({ error: `lookup failed: ${e instanceof Error ? e.message : e}` });
+  }
+});
 
 app.listen(PORT, (err?: Error) => {
   // Express 5 reports listen errors (e.g. port already in use) through this callback.
@@ -171,14 +233,12 @@ app.listen(PORT, (err?: Error) => {
     console.error(`Another process is using it. Stop it with:  lsof -ti tcp:${PORT} | xargs kill`);
     process.exit(1);
   }
-  console.log(`ACAN merchant on http://localhost:${PORT}  (price ${PRICE}, facilitator: ${MODE})`);
-  console.log(`Paid route: http://localhost:${PORT}/api/insight  ->  pays ${PAY_TO}`);
-  if (PRIVATE_ENABLED) {
-    console.log(
-      `Private route: http://localhost:${PORT}/api/insight-private  (acan-tab, ${PRIVATE_PRICE}, ` +
-        `settle every ${process.env.TAB_CREDIT_LIMIT_USDC ?? "0.03"} USDC, confidentially)`,
-    );
-  } else {
-    console.log("Private route disabled: run `npm run ct:setup` first.");
-  }
+  console.log(`${profile.name} (merchant ${PROFILE_ID}) on http://localhost:${PORT}  facilitator: ${MODE}`);
+  console.log(`pays to ${PAY_TO}`);
+  for (const p of profile.products) console.log(`  GET ${p.path.padEnd(14)} ${p.price.padEnd(7)} ${p.description}`);
+  console.log(
+    PRIVATE_ENABLED
+      ? `schemes: exact + acan-tab (settle every ${stroopsToUsdc(CREDIT_LIMIT)} USDC, confidentially)`
+      : "schemes: exact only (run `npm run ct:setup` for private payments)",
+  );
 });
