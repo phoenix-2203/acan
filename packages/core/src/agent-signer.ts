@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { Address, Keypair, authorizeEntry, hash, xdr } from "@stellar/stellar-sdk";
 import { OZ_SMART_ACCOUNT } from "./config.js";
 

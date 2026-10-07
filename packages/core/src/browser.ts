@@ -3,3 +3,4 @@ export * from "./config.js";
 export * from "./errors.js";
 export * from "./agent-signer.js";
 export * from "./smart-account-transfer.js";
+export * from "./merchant-policy.js";
