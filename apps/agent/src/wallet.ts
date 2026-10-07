@@ -182,7 +182,11 @@ export class AgentWallet {
    * dashboard (under their own rule, not the agent's), so it is a one-off:
    * the agent's allowance is unchanged. Paid publicly with "exact".
    */
-  async requestApproval(url: string, reason: string, timeoutMs = 240_000): Promise<Purchase> {
+  async requestApproval(
+    url: string,
+    reason: string,
+    timeoutMs = Number(process.env.APPROVAL_TIMEOUT_MS ?? 240_000),
+  ): Promise<Purchase> {
     const guardian = process.env.GUARDIAN_URL ?? "http://127.0.0.1:4030";
     const first = await fetch(url);
     if (first.status !== 402) return { ok: false, status: "error", url, reason: `expected HTTP 402, got ${first.status}` };
@@ -213,7 +217,11 @@ export class AgentWallet {
     }).catch(() => null);
     if (!created?.ok) return { ok: false, status: "error", url, priceUsdc, reason: "guardian service unreachable (npm run guardian)" };
     const { id } = await created.json();
-    this.log(`   waiting for the guardian to approve ${priceUsdc} USDC to ${merchant} in the dashboard…`);
+    const dashboard = process.env.DASHBOARD_URL ?? "http://localhost:5173";
+    this.log(
+      `   waiting up to ${Math.round(timeoutMs / 60_000)} min for the guardian to approve ${priceUsdc} USDC to ${merchant}` +
+        ` (dashboard: ${dashboard}, section 5)…`,
+    );
 
     const end = Date.now() + timeoutMs;
     let approval: any;
