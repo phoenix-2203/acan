@@ -129,6 +129,8 @@ let budgetAsked = false;
 const spent: { merchant: string; path: string; price: string; receipt?: string }[] = [];
 const merchantsUsed = new Set<string>();
 let approvalsAsked = 0;
+/** URLs already bought in this run: buying one again is refused (stops runaway loops). */
+const bought = new Set<string>();
 /** URLs whose purchase the smart account refused: the only ones approval may be asked for. */
 const blocked = new Set<string>();
 let catalogs: Record<string, any> = {};
@@ -180,6 +182,10 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       }
       if (mode === "private" && !merchantsUsed.has(merchant)) await wallet.syncTab(merchant);
       const url = `${merchant}${path}${query ? `?${query}` : ""}`;
+      if (bought.has(url)) {
+        log(`   ${bold("REJECTED")} duplicate purchase of ${path}${query ? `?${query}` : ""} (already bought this run; not paid)`);
+        return { output: JSON.stringify({ error: "already bought in this run; reuse the earlier result" }) };
+      }
       if (budgetMode && !budget) {
         log(`   ${bold("REJECTED")} ${call.name} before a task budget was approved`);
         return { output: JSON.stringify({ error: "no budget yet: call request_budget first" }) };
@@ -202,6 +208,7 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
           : await wallet.requestApproval(url, String(call.input.reason ?? "").slice(0, 300) || "(no reason given)");
       const name = catalogs[merchant]?.name ?? merchant;
       if (r.ok) {
+        bought.add(url);
         if (r.scheme !== "exact (guardian-approved)") merchantsUsed.add(merchant);
         spent.push({ merchant: name, path, price: r.priceUsdc ?? "?", receipt: r.receipt });
         log(`   ${bold("PAID")} ${r.priceUsdc} USDC to ${name} for ${path}  ${dim(r.receipt ?? "")}`);
@@ -320,6 +327,9 @@ async function main() {
   try {
     if (mode === "private") {
       for (const m of merchantsUsed) await wallet.closeTab(m);
+      // A task budget is done when the task is: send back whatever the vault
+      // still holds, so nothing is left idle under the agent's control.
+      if (budget && process.env.RETURN_UNUSED !== "0") await wallet.returnUnused();
     }
   } finally {
     await wallet.close();
