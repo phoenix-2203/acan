@@ -1,0 +1,13 @@
+{
+  "name": "@acan/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "MCP server: lets any MCP client (Claude Desktop, Cursor, ...) pay x402 APIs from an ACAN-guarded smart account",
+  "dependencies": {
+    "@acan/core": "*",
+    "@modelcontextprotocol/sdk": "1.30.1",
+    "zod": "3.25.76"
+  }
+}

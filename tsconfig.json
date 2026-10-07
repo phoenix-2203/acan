@@ -11,5 +11,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["packages/core/src", "packages/confidential/src", "apps/merchant/src", "apps/agent/src", "scripts"]
+  "include": ["packages/core/src", "packages/confidential/src", "apps/merchant/src", "apps/agent/src", "apps/mcp/src", "scripts"]
 }
