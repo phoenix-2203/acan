@@ -103,3 +103,37 @@ test("no model configured gives a clear error", () => {
   delete process.env.OLLAMA_MODEL;
   assert.throws(() => createChat("s", TOOLS), /No model configured/);
 });
+
+test("Groq: retries a generation it could not parse, then succeeds", async () => {
+  process.env.GROQ_API_KEY = "test-key";
+  process.env.LLM_RETRY_DELAY_MS = "0";
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    if (calls === 1) {
+      return new Response(
+        JSON.stringify({ error: { code: "tool_use_failed", message: "Parsing failed. The model generated output that could not be parsed." } }),
+        { status: 400 },
+      );
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+  }) as typeof fetch;
+  const chat = createChat("s", TOOLS);
+  chat.say("t");
+  const t = await chat.next();
+  assert.equal(t.text, "ok");
+  assert.equal(calls, 2);
+});
+
+test("Groq: a real client error is not retried", async () => {
+  process.env.GROQ_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { message: "Invalid API Key" } }), { status: 401 });
+  }) as typeof fetch;
+  const chat = createChat("s", TOOLS);
+  chat.say("t");
+  await assert.rejects(chat.next(), /401: Invalid API Key/);
+  assert.equal(calls, 1);
+});
