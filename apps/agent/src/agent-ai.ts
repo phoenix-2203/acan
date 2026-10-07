@@ -13,6 +13,7 @@
  */
 import { loadEnv, requireEnv, stroopsToUsdc, usdcToStroops } from "@acan/core";
 import { createChat, type Tool, type ToolCall } from "./llm.js";
+import { merchantPins, merchantUrls } from "./merchants.js";
 import { AgentWallet, type Mode } from "./wallet.js";
 
 loadEnv();
@@ -23,29 +24,14 @@ const mode: Mode = args.includes("--private") ? "private" : "public";
 const budgetMode = args.includes("--budget");
 const MAX_BUDGET_USDC = Number(process.env.MAX_BUDGET_USDC ?? 1);
 const taskArg = args.filter((a) => !a.startsWith("--")).join(" ").trim();
-const MERCHANTS = (process.env.MERCHANT_URLS ?? "http://localhost:4021,http://localhost:4022")
-  .split(",")
-  .map((u) => u.trim().replace(/\/$/, ""))
-  .filter(Boolean);
+const MERCHANTS = merchantUrls();
 const MAX_STEPS = Number(process.env.AGENT_MAX_STEPS ?? 12);
 
 /**
- * Known payment address per merchant. A 402 that asks to be paid anywhere
- * else is refused before anything is signed. MERCHANT_PINS="url=G...,url=G..."
- * sets them; the two demo merchants are pinned from .env by default, and any
- * other merchant is pinned to the address its catalog gave on first contact.
+ * Known payment address per merchant (see merchants.ts). A 402 that asks to be
+ * paid anywhere else is refused before anything is signed.
  */
-const PINS = new Map<string, string>(
-  (process.env.MERCHANT_PINS ?? "")
-    .split(",")
-    .map((kv) => kv.split("=").map((x) => x.trim()))
-    .filter((kv): kv is [string, string] => kv.length === 2 && Boolean(kv[0] && kv[1]))
-    .map(([u, a]) => [u.replace(/\/$/, ""), a]),
-);
-if (!process.env.MERCHANT_URLS) {
-  if (process.env.MERCHANT_ADDRESS && !PINS.has("http://localhost:4021")) PINS.set("http://localhost:4021", process.env.MERCHANT_ADDRESS);
-  if (process.env.MERCHANT_B_ADDRESS && !PINS.has("http://localhost:4022")) PINS.set("http://localhost:4022", process.env.MERCHANT_B_ADDRESS);
-}
+const PINS = merchantPins();
 const pinFor = (merchant: string): string | undefined => PINS.get(merchant) ?? catalogs[merchant]?.payTo;
 
 const TASK =
