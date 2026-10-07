@@ -310,7 +310,7 @@ npm run web            # dashboard: create the passkey smart account, authorize 
 npm run merchant       # x402 merchant A   (and: npm run merchant:b)
 npm run guardian       # approvals + audit service
 npm run agent:ai       # the AI agent shops within its allowance
-npm run mcp            # or: let any MCP client (Claude Desktop, Cursor) shop with it`}</code>>
+npm run mcp            # or: let any MCP client (Claude Desktop, Cursor) shop with it`}</code>
           </pre>
         </section>
       </main>
