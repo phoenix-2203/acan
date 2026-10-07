@@ -7,3 +7,4 @@ export * from "./facilitator.js";
 export * from "./smart-account-transfer.js";
 export * from "./tab/index.js";
 export * from "./merchant-guards.js";
+export * from "./payment-id.js";
