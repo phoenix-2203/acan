@@ -277,6 +277,16 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   are only as large as needed, rounded up to one chunk, so this leftover is at most
   one chunk (0.10 USDC here) and always within the cap. A production version
   would let the guardian claw back or freeze the vault.
+- **What the allowlist covers.** It restricts payments out of the smart
+  account (x402 payments and vault top-ups). Settlements out of the agent's
+  confidential vault are confidential transfers and are not checked by it; the
+  vault only ever holds what the capped rule let in.
+- **Approvals.** The guardian service only relays requests; it never signs.
+  The passkey signature is made in the guardian's browser after the dashboard
+  checks the request against the transaction it would authorize.
+- **The model is not trusted.** The language model chooses what to buy, but
+  cannot change the rule, the limit, the expiry or the allowlist: those need the
+  guardian's passkey.
 - **Merchant credit risk.** A merchant serving on credit risks at most
   `creditLimit` per payer. The signed voucher chain is its evidence of the debt.
 - **Event retention.** Confidential balances are rebuilt from contract events.
