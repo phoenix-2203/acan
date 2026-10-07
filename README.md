@@ -72,6 +72,20 @@ each item from the cheaper merchant:
 
 Both payments passed the spending-limit policy and the allowlist policy on-chain.
 
+**AI agent, private mode.** Same task with `--private`: both purchases were paid with
+vouchers, then settled in confidential transfers whose amounts are hidden on-chain
+([`05ffdfc9…`](https://stellar.expert/explorer/testnet/tx/05ffdfc9824827bc371ad4379bb71aa4ca9f1554c2a6c38b7407d8d1689b5b4e),
+[`02e6c263…`](https://stellar.expert/explorer/testnet/tx/02e6c2634346ebea5d7655022234f0439bd8aa6dc3189488272f2e49894b654d),
+[`178e5358…`](https://stellar.expert/explorer/testnet/tx/178e535825a1ab2c0f52ce3aa00c3e88b302c1c3cb4950114b782f7cf1761d7b)).
+The vault was refilled through the capped rule
+([top-up `d673caca…`](https://stellar.expert/explorer/testnet/tx/d673caca8ec13a1738e7faa48860b08104076572041bf4bc866033d33ceae916)).
+The guardian's audit then matched each merchant's own ledger:
+
+```
+Settled to merchant A: 0.11 USDC in 5 confidential transfer(s); merchant's ledger: owed 0.11 USDC, settled 0.11 USDC (MATCHES the decrypted total).
+Settled to merchant B: 0.01 USDC in 1 confidential transfer(s); merchant's ledger: owed 0.01 USDC, settled 0.01 USDC (MATCHES the decrypted total).
+```
+
 ---
 
 ## How it works
