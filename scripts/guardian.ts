@@ -14,6 +14,8 @@
  *   GET  /budgets/:id           one request's status, with the new rule id once approved
  *   POST /budgets/:id/approve   the dashboard reports the rule it created with the passkey
  *   POST /budgets/:id/reject
+ *   POST /freeze                {frozen: boolean} while frozen, agent requests are
+ *                               refused and pending ones are rejected
  *
  * The service never signs anything, and never creates rules. Approval happens in the browser with the
  * guardian's passkey; the smart account checks that signature on-chain.
@@ -49,6 +51,8 @@ interface Approval {
   signedEntryXdr?: string;
 }
 const approvals = new Map<string, Approval>();
+/** Freeze switch: while on, no agent request reaches the guardian. */
+let frozen = false;
 
 const app = express();
 app.use(express.json({ limit: "64kb" }));
@@ -79,6 +83,7 @@ app.get("/config", (_req, res) => {
     process.env.AGENT_VAULT_ADDRESS && { address: process.env.AGENT_VAULT_ADDRESS, label: "Agent's private vault (top-ups)" },
   ].filter(Boolean);
   res.json({
+    frozen,
     allowlistPolicy: process.env.ALLOWLIST_POLICY || null,
     agentAddress: process.env.AGENT_ADDRESS || null,
     recipients,
@@ -99,7 +104,26 @@ app.get("/audit", async (_req, res) => {
   }
 });
 
+app.post("/freeze", (req, res) => {
+  if (typeof req.body?.frozen !== "boolean") return void res.status(400).json({ error: "body must be {frozen: boolean}" });
+  frozen = req.body.frozen;
+  if (frozen) {
+    for (const a of approvals.values()) if (a.status === "pending") a.status = "rejected";
+    for (const b of budgets.values()) if (b.status === "pending") b.status = "rejected";
+  }
+  console.log(frozen ? "FROZEN: agent requests are refused and pending ones were rejected" : "unfrozen: agent requests accepted again");
+  res.json({ frozen });
+});
+
+/** Refuse agent requests while the guardian has frozen them. */
+const refuseIfFrozen = (res: express.Response): boolean => {
+  if (!frozen) return false;
+  res.status(423).json({ error: "the guardian has frozen agent requests" });
+  return true;
+};
+
 app.post("/approvals", (req, res) => {
+  if (refuseIfFrozen(res)) return;
   const b = req.body ?? {};
   for (const k of ["merchant", "url", "payTo", "amount", "reason", "entryXdr"]) {
     if (typeof b[k] !== "string" || !b[k]) return void res.status(400).json({ error: `missing ${k}` });
@@ -185,6 +209,7 @@ function expireBudgets() {
 }
 
 app.post("/budgets", (req, res) => {
+  if (refuseIfFrozen(res)) return;
   const b = req.body ?? {};
   if (typeof b.agentKey !== "string" || !/^G[A-Z2-7]{55}$/.test(b.agentKey)) {
     return void res.status(400).json({ error: "bad agentKey" });

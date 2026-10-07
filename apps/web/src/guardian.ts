@@ -84,6 +84,8 @@ export function checkRequest(a: Approval, account: string): string | null {
 export const GUARDIAN_RULE_ID = 0;
 
 export interface GuardianConfig {
+  /** Agent requests are refused while true (older guardian services omit it). */
+  frozen?: boolean;
   allowlistPolicy: string | null;
   agentAddress: string | null;
   recipients: { address: string; label: string }[];
@@ -122,4 +124,16 @@ export async function reportBudget(id: string, outcome: { ruleId: number } | "re
     body: outcome === "reject" ? undefined : JSON.stringify(outcome),
   });
   if (!r.ok) throw new Error((await r.json()).error ?? `HTTP ${r.status}`);
+}
+
+/** Freeze or unfreeze agent requests (approvals and budgets) at the guardian service. */
+export async function setFrozen(frozen: boolean): Promise<boolean> {
+  const r = await fetch(`${GUARDIAN_URL}/freeze`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ frozen }),
+  });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return Boolean(body.frozen);
 }
