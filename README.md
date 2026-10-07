@@ -165,6 +165,21 @@ guardian's own browser before the passkey signs anything.
   twice: what the public sees ("hidden") and what the guardian's auditor key
   decrypts, locally on the guardian's machine.
 
+### 5. The AI agent
+
+`npm run agent:ai` hands a task to a language model with five tools:
+`list_merchants`, `check_budget`, `buy`, `request_approval` and `finish`.
+Two demo merchants sell the same real testnet data at different prices
+(Northwind Data on port 4021, Southgate Data on port 4022), so the model has to
+compare catalogs and buy each item from the cheaper one. Every payment still
+goes through the smart account, so the on-chain limit binds the model whatever
+it decides; the model only chooses *what* to buy. `--private` makes it pay with
+tab vouchers and settle confidentially.
+
+Providers (no SDKs, plain HTTPS): Groq (`GROQ_API_KEY`, default model
+`openai/gpt-oss-120b`), Claude (`ANTHROPIC_API_KEY`) or a local Ollama model
+(`OLLAMA_MODEL`).
+
 ---
 
 ## Run it yourself (testnet)
