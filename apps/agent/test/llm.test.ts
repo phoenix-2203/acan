@@ -137,3 +137,15 @@ test("Groq: a real client error is not retried", async () => {
   await assert.rejects(chat.next(), /401: Invalid API Key/);
   assert.equal(calls, 1);
 });
+
+test("rate limits wait as long as the API asks", async () => {
+  const { retryAfterMs } = await import("../src/llm.js");
+  const h = (v: string | null) => ({ headers: { get: () => v } });
+  assert.equal(retryAfterMs(h("3"), {}), 3000);
+  assert.equal(
+    retryAfterMs(h(null), { error: { message: "Rate limit reached ... Please try again in 6.359999999s. Need more tokens?" } }),
+    6610,
+  );
+  assert.equal(retryAfterMs(h(null), { error: { message: "try again in 450ms" } }), 700);
+  assert.equal(retryAfterMs(h(null), { error: { message: "something else" } }), undefined);
+});
