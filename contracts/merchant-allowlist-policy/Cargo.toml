@@ -1,10 +1,10 @@
 [package]
 name = "acan-merchant-allowlist-policy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 publish = false
-description = "OpenZeppelin smart-account policy: a context rule may only transfer to an allowlist of recipients"
+description = "OpenZeppelin smart-account policy: allowlist, per-recipient caps and a payment-count limit for an agent's context rule"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
