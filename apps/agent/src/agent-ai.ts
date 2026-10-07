@@ -136,8 +136,15 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       const merchant = String(call.input.merchant ?? "").replace(/\/$/, "");
       const path = String(call.input.path ?? "");
       const query = String(call.input.query ?? "").replace(/^\?/, "");
-      if (!MERCHANTS.includes(merchant)) return { output: JSON.stringify({ error: `unknown merchant ${merchant}` }) };
-      if (!/^\/api\/[a-z-]+$/.test(path)) return { output: JSON.stringify({ error: `invalid path ${path}` }) };
+      // The model's arguments are untrusted: only listed merchants and plain product paths.
+      if (!MERCHANTS.includes(merchant)) {
+        log(`   ${bold("REJECTED")} unknown merchant ${JSON.stringify(merchant)} (not paid)`);
+        return { output: JSON.stringify({ error: `unknown merchant ${merchant}; use a URL exactly as listed` }) };
+      }
+      if (!/^\/api\/[a-z-]+$/.test(path)) {
+        log(`   ${bold("REJECTED")} invalid path ${JSON.stringify(path)} (not paid)`);
+        return { output: JSON.stringify({ error: `invalid path ${path}` }) };
+      }
       if (mode === "private" && !merchantsUsed.has(merchant)) await wallet.syncTab(merchant);
       const url = `${merchant}${path}${query ? `?${query}` : ""}`;
       if (call.name === "request_approval" && approvalsAsked++ > 0) {
