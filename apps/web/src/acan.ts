@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { StrKey, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   IndexedDBStorage,
@@ -38,6 +39,8 @@ export interface AgentGrant {
   maxPayments?: number;
   /** Set when the rule is a task budget the agent asked for. */
   task?: string;
+  /** Found on-chain but not in this browser's records (e.g. storage was cleared). */
+  discovered?: boolean;
   createdAt: string;
 }
 
@@ -117,7 +120,13 @@ export async function grantAgent(
   const result = await kit.signAndSubmitAdmin(tx);
   if (!result.success) throw new Error(result.error?.message ?? "Rule creation failed");
 
-  const ruleId = typeof simulated?.id === "number" ? simulated.id : (await kit.rules.count()) - 1;
+  // get_context_rules_count is the number of live rules, not the next id
+  // (ids stay sparse after revocations), so fall back to reading the chain.
+  const ruleId =
+    typeof simulated?.id === "number"
+      ? simulated.id
+      : Math.max(...(await agentRulesOnChain()).filter((r) => r.agentKey === agentKey).map((r) => r.ruleId));
+  if (!Number.isInteger(ruleId)) throw new Error("Rule created, but its id could not be read back; refresh the page");
   const grant: AgentGrant = {
     ruleId,
     agentKey,
@@ -132,6 +141,37 @@ export async function grantAgent(
   };
   saveGrants(account, [...loadGrants(account).filter((g) => g.ruleId !== ruleId), grant]);
   return grant;
+}
+
+/** An agent rule as it exists on-chain (whatever this browser remembers). */
+export interface OnChainAgentRule {
+  ruleId: number;
+  name: string;
+  agentKey: string;
+  validUntil?: number;
+  policies: string[];
+}
+
+/**
+ * Every rule on the connected account whose signer is an Ed25519 agent key,
+ * read from the contract. The dashboard lists these even if this browser's
+ * storage was cleared, so no live allowance can hide from the guardian.
+ */
+export async function agentRulesOnChain(): Promise<OnChainAgentRule[]> {
+  const rules = await kit.rules.list();
+  return rules.flatMap((r) => {
+    const key = r.signers.find((s) => s.tag === "External" && s.values[0] === OZ_SMART_ACCOUNT.ed25519Verifier);
+    if (!key || key.tag !== "External" || key.values[1].length !== 32) return [];
+    return [
+      {
+        ruleId: r.id,
+        name: r.name,
+        agentKey: StrKey.encodeEd25519PublicKey(Buffer.from(key.values[1])),
+        validUntil: r.valid_until ?? undefined,
+        policies: [...r.policies],
+      },
+    ];
+  });
 }
 
 /** Revoke instantly by deleting the agent's context rule. */
