@@ -135,7 +135,12 @@ export class AgentWallet {
     if (r.ok) this.tab.syncFromMerchant(info.payTo, await r.json());
   }
 
-  async buy(url: string): Promise<Purchase> {
+  /**
+   * Buy one resource. `expectPayTo` pins the merchant's payment address: if
+   * the 402 response asks to be paid anywhere else (a compromised or
+   * malicious server redirecting payTo), nothing is signed.
+   */
+  async buy(url: string, expectPayTo?: string): Promise<Purchase> {
     const first = await fetch(url);
     if (first.status === 200) return { ok: true, status: "paid", url, priceUsdc: "0", data: await first.json() };
     if (first.status !== 402) return { ok: false, status: "error", url, reason: `HTTP ${first.status}: ${(await first.text()).slice(0, 200)}` };
@@ -144,6 +149,8 @@ export class AgentWallet {
     const req = required.accepts.find((a) => a.scheme === scheme);
     if (!req) return { ok: false, status: "refused", url, reason: `merchant does not accept ${scheme}` };
     const priceUsdc = stroopsToUsdc(req.amount);
+    const redirected = payToMismatch(req.payTo, expectPayTo);
+    if (redirected) return { ok: false, status: "refused", url, priceUsdc, scheme, reason: redirected };
     this.tab?.setResource(url);
 
     let payload;
@@ -247,6 +254,7 @@ export class AgentWallet {
     url: string,
     reason: string,
     timeoutMs = Number(process.env.APPROVAL_TIMEOUT_MS ?? 240_000),
+    expectPayTo?: string,
   ): Promise<Purchase> {
     const guardian = process.env.GUARDIAN_URL ?? "http://127.0.0.1:4030";
     const first = await fetch(url);
@@ -255,6 +263,8 @@ export class AgentWallet {
     const req = required.accepts.find((a) => a.scheme === "exact");
     if (!req) return { ok: false, status: "refused", url, reason: "merchant does not accept exact payments" };
     const priceUsdc = stroopsToUsdc(req.amount);
+    const redirected = payToMismatch(req.payTo, expectPayTo);
+    if (redirected) return { ok: false, status: "refused", url, priceUsdc, reason: redirected };
     let merchant = new URL(url).host;
     try {
       merchant = (await (await fetch(new URL(url).origin)).json()).name ?? merchant;
@@ -346,4 +356,10 @@ export class AgentWallet {
   async close(): Promise<void> {
     await this.account?.close();
   }
+}
+
+/** A refusal reason when a 402 asks to be paid somewhere other than the pinned address. */
+export function payToMismatch(payTo: string, expected?: string): string | null {
+  if (!expected || payTo === expected) return null;
+  return `merchant asked to be paid at ${payTo}, not its known address ${expected}: refused before signing (possible payTo redirection)`;
 }
