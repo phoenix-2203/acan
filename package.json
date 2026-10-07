@@ -28,6 +28,7 @@
     "guardian": "tsx scripts/guardian.ts",
     "allowlist:deploy": "tsx scripts/deploy-allowlist.ts",
     "demo:allowlist": "tsx scripts/demo-allowlist.ts",
+    "demo:caps": "tsx scripts/demo-caps.ts",
     "merchant:cashout": "tsx scripts/merchant-cashout.ts",
     "ct:build": "cd vendor/ctd-demo && pnpm install && pnpm build:sdk",
     "test:contracts": "cd contracts && cargo test"
