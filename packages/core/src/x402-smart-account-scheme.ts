@@ -1,4 +1,4 @@
-import { Address, TransactionBuilder, contract, nativeToScVal } from "@stellar/stellar-sdk";
+import { Address, TransactionBuilder, contract, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import {
   findDefaultAsset,
   getEstimatedLedgerCloseTimeSeconds,
@@ -42,80 +42,101 @@ export class SmartAccountExactStellarScheme implements SchemeNetworkClient {
     x402Version: number,
     paymentRequirements: PaymentRequirements,
   ): Promise<Pick<PaymentPayload, "x402Version" | "payload">> {
-    validateRequirements(paymentRequirements);
-
-    const payer = this.signer.smartAccount;
-    const { network, payTo, asset, amount, extra, maxTimeoutSeconds } = paymentRequirements;
-    if (!extra?.areFeesSponsored) {
-      throw new Error("Exact scheme requires areFeesSponsored to be true");
+    if (getNetworkPassphrase(paymentRequirements.network) !== this.signer.networkPassphrase) {
+      throw new Error(`Network mismatch: server asked for ${paymentRequirements.network}, signer is for another network`);
     }
-
-    const networkPassphrase = getNetworkPassphrase(network);
-    if (networkPassphrase !== this.signer.networkPassphrase) {
-      throw new Error(`Network mismatch: server asked for ${network}, signer is for another network`);
-    }
-    const rpcUrl = getRpcUrl(network, this.rpcConfig);
-    const rpcServer = getRpcClient(network, this.rpcConfig);
-    const currentLedger = (await rpcServer.getLatestLedger()).sequence;
-    const ledgerSeconds = await getEstimatedLedgerCloseTimeSeconds(network);
-    const maxLedger = currentLedger + Math.ceil(maxTimeoutSeconds / ledgerSeconds);
-
-    const tx = await contract.AssembledTransaction.build({
-      contractId: asset,
-      method: "transfer",
-      args: [
-        nativeToScVal(payer, { type: "address" }),
-        nativeToScVal(payTo, { type: "address" }),
-        nativeToScVal(amount, { type: "i128" }),
-      ],
-      networkPassphrase,
-      rpcUrl,
-      parseResultXdr: (result) => result,
-    });
-    handleSimulationResult(tx.simulation);
-
-    const missing = tx.needsNonInvokerSigningBy();
-    if (!missing.includes(payer) || missing.length > 1) {
-      throw new Error(`Expected to sign with [${payer}], but got [${missing.join(", ")}]`);
-    }
-
-    // Sign the smart account's auth entry in place (same pattern the SDK's
-    // own signAuthEntries uses: the decoded op shares the envelope's array).
-    const op = tx.built!.operations[0] as unknown as { auth?: any[] };
-    const authEntries = op.auth ?? [];
-    let signed = 0;
-    for (const [i, entry] of authEntries.entries()) {
-      if (entryAddress(entry) !== payer) continue;
-      authEntries[i] = await this.signer.signEntry(entry, maxLedger);
-      signed++;
-    }
-    if (signed !== 1) throw new Error(`Expected exactly one auth entry for ${payer}, signed ${signed}`);
-
-    // Re-simulate in enforcing mode: this runs the account's __check_auth,
-    // including the spending-limit policy. Over-limit payments fail here,
-    // before anything is sent to the merchant.
-    await tx.simulate();
-    try {
-      handleSimulationResult(tx.simulation);
-    } catch (err) {
-      throw new PaymentRejectedError(describeSimulationError(err), err);
-    }
-    const stillMissing = tx.needsNonInvokerSigningBy();
-    if (stillMissing.length > 0) {
-      throw new Error(`Unexpected signer(s) required: [${stillMissing.join(", ")}]`);
-    }
-
-    // Same adjustment as the official Stellar x402 quickstart client: the
-    // facilitator pays fees, so the inner fee is set to 1 stroop to stay
-    // under the facilitator's fee ceiling. Soroban resource data is kept.
-    const built = tx.built!;
-    const sorobanData = built.toEnvelope().v1()?.tx()?.ext()?.sorobanData();
-    const finalXdr = sorobanData
-      ? TransactionBuilder.cloneFrom(built, { fee: "1", sorobanData, networkPassphrase }).build().toXDR()
-      : built.toXDR();
-
-    return { x402Version, payload: { transaction: finalXdr } };
+    const prepared = await prepareSmartAccountPayment(this.signer.smartAccount, paymentRequirements, this.rpcConfig);
+    const signed = await this.signer.signEntry(prepared.entry(), prepared.maxLedger);
+    const transaction = await prepared.finalize(signed);
+    return { x402Version, payload: { transaction } };
   }
+}
+
+/**
+ * An x402 "exact" payment from a smart account, built and simulated but not
+ * yet authorized. `entry()` is the smart account's unsigned auth entry; sign
+ * it (agent key, or the guardian's passkey for an approved one-off payment)
+ * and pass it to `finalize()` to get the payload transaction XDR.
+ */
+export interface PreparedSmartAccountPayment {
+  maxLedger: number;
+  entry(): xdr.SorobanAuthorizationEntry;
+  finalize(signedEntry: xdr.SorobanAuthorizationEntry): Promise<string>;
+}
+
+export async function prepareSmartAccountPayment(
+  payer: string,
+  paymentRequirements: PaymentRequirements,
+  rpcConfig?: RpcConfig,
+): Promise<PreparedSmartAccountPayment> {
+  validateRequirements(paymentRequirements);
+  const { network, payTo, asset, amount, extra, maxTimeoutSeconds } = paymentRequirements;
+  if (!extra?.areFeesSponsored) {
+    throw new Error("Exact scheme requires areFeesSponsored to be true");
+  }
+  const networkPassphrase = getNetworkPassphrase(network);
+  const rpcUrl = getRpcUrl(network, rpcConfig);
+  const rpcServer = getRpcClient(network, rpcConfig);
+  const currentLedger = (await rpcServer.getLatestLedger()).sequence;
+  const ledgerSeconds = await getEstimatedLedgerCloseTimeSeconds(network);
+  const maxLedger = currentLedger + Math.ceil(maxTimeoutSeconds / ledgerSeconds);
+
+  const tx = await contract.AssembledTransaction.build({
+    contractId: asset,
+    method: "transfer",
+    args: [
+      nativeToScVal(payer, { type: "address" }),
+      nativeToScVal(payTo, { type: "address" }),
+      nativeToScVal(amount, { type: "i128" }),
+    ],
+    networkPassphrase,
+    rpcUrl,
+    parseResultXdr: (result) => result,
+  });
+  handleSimulationResult(tx.simulation);
+
+  const missing = tx.needsNonInvokerSigningBy();
+  if (!missing.includes(payer) || missing.length > 1) {
+    throw new Error(`Expected to sign with [${payer}], but got [${missing.join(", ")}]`);
+  }
+  // The decoded op shares the envelope's auth array (same pattern as the
+  // SDK's own signAuthEntries), so entries are replaced in place.
+  const op = tx.built!.operations[0] as unknown as { auth?: xdr.SorobanAuthorizationEntry[] };
+  const authEntries = op.auth ?? [];
+  const index = authEntries.findIndex((e) => entryAddress(e) === payer);
+  if (index < 0 || authEntries.filter((e) => entryAddress(e) === payer).length !== 1) {
+    throw new Error(`Expected exactly one auth entry for ${payer}`);
+  }
+
+  return {
+    maxLedger,
+    entry: () => authEntries[index],
+    async finalize(signedEntry) {
+      if (entryAddress(signedEntry) !== payer) throw new Error("Signed entry is not for the payer");
+      authEntries[index] = signedEntry;
+      // Re-simulate in enforcing mode: this runs the account's __check_auth,
+      // including any policy (e.g. the spending limit). A refused payment
+      // fails here, before anything is sent to the merchant.
+      await tx.simulate();
+      try {
+        handleSimulationResult(tx.simulation);
+      } catch (err) {
+        throw new PaymentRejectedError(describeSimulationError(err), err);
+      }
+      const stillMissing = tx.needsNonInvokerSigningBy();
+      if (stillMissing.length > 0) {
+        throw new Error(`Unexpected signer(s) required: [${stillMissing.join(", ")}]`);
+      }
+      // Same adjustment as the official Stellar x402 quickstart client: the
+      // facilitator pays fees, so the inner fee is 1 stroop to stay under the
+      // facilitator's fee ceiling. Soroban resource data is kept.
+      const built = tx.built!;
+      const sorobanData = built.toEnvelope().v1()?.tx()?.ext()?.sorobanData();
+      return sorobanData
+        ? TransactionBuilder.cloneFrom(built, { fee: "1", sorobanData, networkPassphrase }).build().toXDR()
+        : built.toXDR();
+    },
+  };
 }
 
 /** Raised when the smart account's own rules refuse a payment. */
@@ -128,9 +149,17 @@ export class PaymentRejectedError extends Error {
 
 /**
  * Known OpenZeppelin smart-account contract error codes
- * (smart-account-kit CONTRACT_ERROR_REGISTRY: SpendingLimit 3220-3227).
+ * (smart-account-kit CONTRACT_ERROR_REGISTRY: SmartAccount 3000-3016, SpendingLimit 3220-3227).
  */
 const KNOWN_CODES: Record<number, string> = {
+  3000: "ContextRuleNotFound: the agent's allowance was revoked",
+  3002: "UnvalidatedContext: no active allowance covers this payment (revoked or expired)",
+  3003: "ExternalVerificationFailed: the agent's signature was not accepted",
+  3016: "UnauthorizedSigner: this key is not authorized on the smart account",
+  3223: "NotAllowed: the spending-limit policy only allows token transfers",
+  3401: "RecipientNotAllowed: this recipient is not on the guardian's merchant allowlist",
+  3402: "NotAllowed: the merchant allowlist only allows token transfers",
+  3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
   3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
 };
 
