@@ -30,6 +30,7 @@ import {
   type Approval,
   type AuditReport,
 } from "./guardian";
+import { auditCsv, auditJson, download } from "./audit-export";
 
 type Busy =
   | null
@@ -659,6 +660,22 @@ export default function App() {
                     ))}
                 </tbody>
               </table>
+              <div className="row">
+                <button
+                  className="ghost"
+                  onClick={() => download(`acan-spending-${new Date().toISOString().slice(0, 10)}.csv`, auditCsv(audit), "text/csv")}
+                >
+                  Download report (CSV)
+                </button>
+                <button
+                  className="ghost"
+                  onClick={() =>
+                    download(`acan-spending-${new Date().toISOString().slice(0, 10)}.json`, auditJson(audit), "application/json")
+                  }
+                >
+                  JSON
+                </button>
+              </div>
               <ul className="feed">
                 {Object.entries(audit.totalsTo).map(([to, total]) => (
                   <li key={to}>
