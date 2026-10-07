@@ -164,23 +164,34 @@ class OpenAICompatibleChat implements Chat {
   }
 
   async next(): Promise<Turn> {
-    const res = await fetch(this.cfg.url, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.cfg.key}` },
-      body: JSON.stringify({
-        model: this.cfg.model,
-        messages: this.messages,
-        tools: this.tools.map((t) => ({
-          type: "function",
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        })),
-        tool_choice: "auto",
-        temperature: 0.2,
-        max_completion_tokens: 1024,
-      }),
-    });
-    const body = (await res.json()) as any;
-    if (!res.ok) throw new Error(`${this.cfg.label} API ${res.status}: ${body?.error?.message ?? JSON.stringify(body).slice(0, 300)}`);
+    // Groq occasionally rejects a generation whose tool call it cannot parse
+    // (HTTP 400, code "tool_use_failed"). The request itself is fine, so
+    // sampling again usually succeeds.
+    let body: any;
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetch(this.cfg.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${this.cfg.key}` },
+        body: JSON.stringify({
+          model: this.cfg.model,
+          messages: this.messages,
+          tools: this.tools.map((t) => ({
+            type: "function",
+            function: { name: t.name, description: t.description, parameters: t.parameters },
+          })),
+          tool_choice: "auto",
+          temperature: 0.2,
+          max_completion_tokens: 1024,
+        }),
+      });
+      body = (await res.json()) as any;
+      if (res.ok) break;
+      if (attempt < MAX_ATTEMPTS && isRetryable(res.status, body)) {
+        await new Promise((r) => setTimeout(r, retryDelayMs() * attempt));
+        continue;
+      }
+      throw new Error(`${this.cfg.label} API ${res.status}: ${body?.error?.message ?? JSON.stringify(body).slice(0, 300)}`);
+    }
     const msg = body.choices?.[0]?.message ?? {};
     // Keep only the fields the API accepts back in the history.
     this.messages.push({
@@ -203,4 +214,15 @@ class OpenAICompatibleChat implements Chat {
   results(results: { call: ToolCall; output: string }[]): void {
     for (const r of results) this.messages.push({ role: "tool", tool_call_id: r.call.id, content: r.output });
   }
+}
+
+const MAX_ATTEMPTS = 3;
+const retryDelayMs = () => Number(process.env.LLM_RETRY_DELAY_MS ?? 1000);
+
+/** A malformed tool call (400 tool_use_failed) or a transient server/rate-limit error. */
+export function isRetryable(status: number, body: any): boolean {
+  if (status === 429 || status >= 500) return true;
+  const code = body?.error?.code;
+  const message = String(body?.error?.message ?? "");
+  return status === 400 && (code === "tool_use_failed" || /Parsing failed/i.test(message));
 }
