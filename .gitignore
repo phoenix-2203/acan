@@ -12,3 +12,4 @@ vendor/ctd-demo/packages/sdk/package-lock.json
 .acan/
 vendor/bb-crs/
 vendor/ctd/
+test_snapshots/
