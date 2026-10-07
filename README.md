@@ -205,11 +205,23 @@ npm run status          # balances + allowance
 Private mode:
 
 ```bash
-npm run ct:setup        # agent vault account, confidential keys, registers vault + merchant (2 proofs)
-npm run merchant        # restart: now also serves /api/insight-private (acan-tab)
+npm run ct:setup        # agent vault, confidential keys; registers vault + both merchants (1 proof each)
+npm run merchant        # restart: every paid route now also accepts acan-tab
 npm run agent:private   # 7 requests, settles every 0.03 USDC confidentially, closes the tab
 npm run audit           # public view vs guardian view
 npm run merchant:cashout  # optional: merchant withdraws its confidential balance to public USDC
+```
+
+Guardian controls and the AI agent:
+
+```bash
+npm run allowlist:deploy  # build + deploy the merchant allowlist policy (Rust, stellar CLI); saves ALLOWLIST_POLICY
+npm run guardian          # local service for approvals + the private-spending panel (port 4030)
+npm run merchant:b        # second merchant, different prices (port 4022)
+# in the dashboard: authorize the agent with an expiry and the allowlist ticked
+# put ONE of GROQ_API_KEY / ANTHROPIC_API_KEY / OLLAMA_MODEL in .env
+npm run agent:ai              # the model compares both merchants and buys within its allowance
+npm run agent:ai -- --private # same, paying with vouchers and confidential settlements
 ```
 
 The confidential-token addresses in `packages/confidential/src/deployment.ts`
@@ -220,10 +232,16 @@ update that file. The deploy writes the auditor key to
 `vendor/ctd-demo/deployments/testnet.json` (git-ignored), and `ct:setup` copies
 it into `.env`.
 
-Tests (offline): `npm test` covers the agent's auth payload against
-`smart-account-kit`, the facilitator event filter, voucher signing, the tab
-ledger, a full x402 HTTP round-trip of `acan-tab` with a fake confidential rail,
-and decryption by both the merchant and the auditor.
+Tests (offline, also run by CI on every push):
+
+- `npm test`: the agent's auth payload against `smart-account-kit`, the
+  facilitator event filter, voucher signing, the tab ledger, a full x402 HTTP
+  round-trip of `acan-tab` next to `exact`, decryption by both the merchant and
+  the auditor, the model adapters' tool-call handling, and the dashboard's
+  approval safety checks.
+- `npm run test:contracts`: the allowlist policy, including an integration test
+  that runs OpenZeppelin's real smart-account auth with the spending-limit
+  policy and the allowlist on one rule.
 
 ---
 
@@ -235,10 +253,14 @@ packages/core           smart-account agent signer, x402 client scheme, smart-ac
                         client, server, facilitator)
 packages/confidential   wrapper over the confidential-token SDK: ConfidentialAccount,
                         ConfidentialVault (policy-capped top-ups), MerchantInbox (decrypts settlements)
-apps/web                guardian dashboard (passkey smart account, grant/revoke allowances)
-apps/merchant           demo x402 merchant: /api/insight (exact) and /api/insight-private (acan-tab)
-apps/agent              agent.ts (public mode), agent-private.ts (private mode)
-scripts                 setup, fund, status, diagnose, ct-setup, audit, merchant-cashout
+apps/web                guardian dashboard: passkey smart account, grant (limit, expiry, allowlist)
+                        and revoke allowances, approval requests, private-spending panel
+apps/merchant           demo x402 merchants A and B: catalog at /, paid data routes (exact + acan-tab)
+apps/agent              agent.ts (public), agent-private.ts (private), agent-ai.ts (language model),
+                        wallet.ts (shared payment logic), llm.ts (Groq / Claude / Ollama adapters)
+contracts               merchant-allowlist-policy: Soroban policy contract for OZ smart accounts
+scripts                 setup, fund, status, diagnose, ct-setup, audit, merchant-cashout,
+                        guardian (local approvals + audit service), deploy-allowlist
 vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT), one patch
 ```
 
