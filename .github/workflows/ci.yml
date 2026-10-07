@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  typescript:
+    name: TypeScript (typecheck, tests, dashboard build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Build the vendored confidential-token SDK
+        working-directory: vendor/ctd-demo
+        run: |
+          pnpm install --frozen-lockfile --filter @ctd/sdk
+          pnpm build:sdk
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests (offline)
+        run: npm test
+      - name: Build the guardian dashboard
+        run: npm run build -w @acan/web
+
+  contracts:
+    name: Soroban contract (tests, wasm build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - name: Tests
+        run: cargo test --manifest-path contracts/Cargo.toml
+      - name: Build wasm
+        run: cargo build --manifest-path contracts/Cargo.toml --release --target wasm32v1-none
