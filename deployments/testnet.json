@@ -1,0 +1,13 @@
+{
+  "network": "stellar:testnet",
+  "note": "Public addresses of ACAN's testnet deployment, read by the demo site. Refresh with: npm run deployment:publish",
+  "smartAccount": "CCV4VQTGJN6GUVNM4LN3JWOWBOOX3E7IGKJ6QUPKZVKMDNV7WEJXVYAQ",
+  "agent": "GB6V5SSWLBJS6AGL7KOSW2CJD4FHHJX5CMFEL2NF2YU6ASUSMMZZIFMZ",
+  "agentRuleId": 5,
+  "agentVault": "GA4Y7NABQIHYBQU5RW6RQL4O4FIWV47ZM52QC7VVWVSL6CZMFTQVXEZL",
+  "merchants": [
+    { "name": "Northwind Data", "address": "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT" },
+    { "name": "Southgate Data", "address": "GDZCGACGQKEPUNXJUMLXSGWJ3KS4YT2MYQGDQYH4DCILADI43P7SVFRA" }
+  ],
+  "merchantPolicy": { "address": "CBRZI4YRN4KDNNE6N6NQPISB6EK4S5XTFZV3LE2GVKZNFKU3M7VB2DLI", "version": "0.1" }
+}
