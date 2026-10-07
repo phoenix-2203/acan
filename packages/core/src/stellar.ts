@@ -146,3 +146,39 @@ export function explorerTx(hash: string): string {
 export function explorerAccount(address: string): string {
   return `https://stellar.expert/explorer/testnet/${address.startsWith("C") ? "contract" : "account"}/${address}`;
 }
+
+export interface MerchantPolicyView {
+  recipients: { address: string; cap: bigint }[];
+  period_ledgers: number;
+  max_payments: number;
+}
+
+export interface MerchantPolicyUsage {
+  window_start: number;
+  payments: number;
+  /** Paid per recipient in the current period. */
+  spent: Map<string, bigint>;
+}
+
+/** Read the merchant budget policy installed on a smart account's rule, and its current-period usage. */
+export async function merchantPolicyState(
+  policy: string,
+  smartAccount: string,
+  contextRuleId: number,
+): Promise<{ params: MerchantPolicyView; usage: MerchantPolicyUsage }> {
+  const args = [nativeToScVal(contextRuleId, { type: "u32" }), nativeToScVal(smartAccount, { type: "address" })];
+  const params = (await simulateRead(policy, "get_params", args)) as any;
+  const state = (await simulateRead(policy, "get_state", args)) as any;
+  const spent = new Map<string, bigint>();
+  const raw = state.spent;
+  if (raw instanceof Map) for (const [k, v] of raw) spent.set(String(k), BigInt(v));
+  else if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) spent.set(k, BigInt(v as bigint));
+  return {
+    params: {
+      recipients: (params.recipients ?? []).map((r: any) => ({ address: String(r.address), cap: BigInt(r.cap) })),
+      period_ledgers: Number(params.period_ledgers),
+      max_payments: Number(params.max_payments),
+    },
+    usage: { window_start: Number(state.window_start), payments: Number(state.payments), spent },
+  };
+}
