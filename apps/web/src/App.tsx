@@ -215,6 +215,11 @@ export default function App() {
       await refreshGuardian();
     });
 
+  const pending = (approvals ?? []).filter((a) => a.status === "pending");
+  useEffect(() => {
+    document.title = pending.length ? `(${pending.length}) Approval needed · ACAN` : "ACAN guardian";
+  }, [pending.length]);
+
   const nameOf = (addr?: string) => (addr ? audit?.names[addr] ?? short(addr) : "");
 
   return (
@@ -233,6 +238,15 @@ export default function App() {
 
       {error && <div className="banner error">{error}</div>}
       {notice && <div className="banner ok">{notice}</div>}
+      {pending.length > 0 && (
+        <div className="banner attention" role="alert">
+          Your agent is asking you to approve {pending[0].amountUsdc} USDC to {pending[0].merchant}
+          {pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}.{" "}
+          <button className="link" onClick={() => document.getElementById("approvals")?.scrollIntoView({ behavior: "smooth" })}>
+            Review
+          </button>
+        </div>
+      )}
 
       <section className="card">
         <div className="step">1</div>
@@ -417,7 +431,7 @@ export default function App() {
       <section className={`card ${account ? "" : "disabled"}`}>
         <div className="step">5</div>
         <div className="body">
-          <h2>Approval requests</h2>
+          <h2 id="approvals">Approval requests</h2>
           {approvals === null ? (
             <p className="muted">
               Start the guardian service with <code>npm run guardian</code> to receive requests from your agent.
