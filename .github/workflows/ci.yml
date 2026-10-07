@@ -45,4 +45,12 @@ jobs:
       - name: Tests
         run: cargo test --manifest-path contracts/Cargo.toml
       - name: Build wasm
-        run: cargo build --manifest-path contracts/Cargo.toml --release --target wasm32v1-none
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! cargo build --manifest-path contracts/Cargo.toml --release --target wasm32v1-none 2>&1 | tee build.log; then
+            # Surface the compiler error as an annotation (readable without the raw logs).
+            echo "::error title=wasm build failed::$(grep -E '^(error|  -->|  = )' build.log | head -20 | tr '\n' ' ' | cut -c1-3000)"
+            exit 1
+          fi
+          ls -l contracts/target/wasm32v1-none/release/*.wasm
