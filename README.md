@@ -1,5 +1,7 @@
 # ACAN: spending allowances for AI agents on Stellar
 
+[![CI](https://github.com/phoenix-2203/acan/actions/workflows/ci.yml/badge.svg)](https://github.com/phoenix-2203/acan/actions/workflows/ci.yml)
+
 ACAN lets a person give an AI agent a **capped, revocable spending key** for paid
 APIs, and lets the agent pay **privately** without escaping that cap.
 
@@ -13,6 +15,11 @@ APIs, and lets the agent pay **privately** without escaping that cap.
   settles the whole tab in **one confidential transfer** whose amount is hidden
   on-chain. Only the merchant and the guardian (who holds the auditor key) can
   read it.
+- The guardian can also make the allowance **expire**, restrict it to an
+  **allowlist of merchants** (a Soroban policy contract in `contracts/`), and
+  **approve one-off payments** above the limit with their passkey.
+- The agent can be driven by a **language model** (Groq, Claude or a local
+  model) that compares merchants' prices and stays within its budget.
 
 Built for the *Find Your Way* hackathon (General Track). Everything runs on
 Stellar **testnet**.
