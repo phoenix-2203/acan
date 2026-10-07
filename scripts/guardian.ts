@@ -9,8 +9,13 @@
  *   GET  /approvals/:id         one request's status (the agent polls this)
  *   POST /approvals/:id/approve the dashboard posts the passkey-signed auth entry
  *   POST /approvals/:id/reject
+ *   POST /budgets               the agent asks for a task budget (amount, duration, merchants)
+ *   GET  /budgets               pending and recent budget requests
+ *   GET  /budgets/:id           one request's status, with the new rule id once approved
+ *   POST /budgets/:id/approve   the dashboard reports the rule it created with the passkey
+ *   POST /budgets/:id/reject
  *
- * The service never signs anything. Approval happens in the browser with the
+ * The service never signs anything, and never creates rules. Approval happens in the browser with the
  * guardian's passkey; the smart account checks that signature on-chain.
  *
  * Usage: npm run guardian
@@ -148,6 +153,101 @@ app.post("/approvals/:id/reject", (req, res) => {
   if (!a || a.status !== "pending") return void res.status(409).json({ error: "not pending" });
   a.status = "rejected";
   console.log(`rejected: ${a.amountUsdc} USDC to ${a.merchant} (${a.id.slice(0, 8)})`);
+  res.json({ ok: true });
+});
+
+// ---- task budgets ----------------------------------------------------------
+
+interface BudgetRequest {
+  id: string;
+  createdAt: number;
+  status: "pending" | "approved" | "rejected" | "expired";
+  /** The agent's public key (the signer for the new rule). */
+  agentKey: string;
+  /** atomic units, total for the task */
+  amount: string;
+  amountUsdc: string;
+  minutes: number;
+  recipients: { address: string; label: string }[];
+  task: string;
+  reason: string;
+  /** The context rule the guardian created for this budget. */
+  ruleId?: number;
+}
+const budgets = new Map<string, BudgetRequest>();
+const MAX_BUDGET_MINUTES = 24 * 60;
+
+function expireBudgets() {
+  const now = Date.now();
+  for (const b of budgets.values()) {
+    if (b.status === "pending" && now - b.createdAt > APPROVAL_TTL_MS) b.status = "expired";
+  }
+}
+
+app.post("/budgets", (req, res) => {
+  const b = req.body ?? {};
+  if (typeof b.agentKey !== "string" || !/^G[A-Z2-7]{55}$/.test(b.agentKey)) {
+    return void res.status(400).json({ error: "bad agentKey" });
+  }
+  if (typeof b.amount !== "string" || !/^\d+$/.test(b.amount) || BigInt(b.amount) <= 0n) {
+    return void res.status(400).json({ error: "bad amount" });
+  }
+  if (!Number.isInteger(b.minutes) || b.minutes < 1 || b.minutes > MAX_BUDGET_MINUTES) {
+    return void res.status(400).json({ error: `minutes must be 1-${MAX_BUDGET_MINUTES}` });
+  }
+  if (!Array.isArray(b.recipients) || b.recipients.length === 0 || b.recipients.length > 20) {
+    return void res.status(400).json({ error: "recipients must list 1-20 addresses" });
+  }
+  for (const r of b.recipients) {
+    if (typeof r?.address !== "string" || !/^[GC][A-Z2-7]{55}$/.test(r.address)) {
+      return void res.status(400).json({ error: "bad recipient address" });
+    }
+  }
+  const req2: BudgetRequest = {
+    id: randomUUID(),
+    createdAt: Date.now(),
+    status: "pending",
+    agentKey: b.agentKey,
+    amount: b.amount,
+    amountUsdc: stroopsToUsdc(b.amount),
+    minutes: b.minutes,
+    recipients: b.recipients.map((r: any) => ({ address: r.address, label: String(r.label ?? "").slice(0, 80) })),
+    task: String(b.task ?? "").slice(0, 500),
+    reason: String(b.reason ?? "").slice(0, 500),
+  };
+  budgets.set(req2.id, req2);
+  console.log(`budget requested: ${req2.amountUsdc} USDC for ${req2.minutes} min (${req2.id.slice(0, 8)}) — "${req2.reason}"`);
+  res.status(201).json({ id: req2.id });
+});
+
+app.get("/budgets", (_req, res) => {
+  expireBudgets();
+  res.json([...budgets.values()].sort((x, y) => y.createdAt - x.createdAt).slice(0, 20));
+});
+
+app.get("/budgets/:id", (req, res) => {
+  expireBudgets();
+  const b = budgets.get(req.params.id);
+  if (!b) return void res.status(404).json({ error: "unknown budget request" });
+  res.json(b);
+});
+
+app.post("/budgets/:id/approve", (req, res) => {
+  const b = budgets.get(req.params.id);
+  if (!b || b.status !== "pending") return void res.status(409).json({ error: "not pending" });
+  const ruleId = req.body?.ruleId;
+  if (!Number.isInteger(ruleId) || ruleId < 0) return void res.status(400).json({ error: "missing ruleId" });
+  b.ruleId = ruleId;
+  b.status = "approved";
+  console.log(`budget approved with the guardian's passkey: rule #${ruleId}, ${b.amountUsdc} USDC for ${b.minutes} min`);
+  res.json({ ok: true });
+});
+
+app.post("/budgets/:id/reject", (req, res) => {
+  const b = budgets.get(req.params.id);
+  if (!b || b.status !== "pending") return void res.status(409).json({ error: "not pending" });
+  b.status = "rejected";
+  console.log(`budget rejected (${b.id.slice(0, 8)})`);
   res.json({ ok: true });
 });
 
