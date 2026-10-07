@@ -158,7 +158,10 @@ const KNOWN_CODES: Record<number, string> = {
   3016: "UnauthorizedSigner: this key is not authorized on the smart account",
   3223: "NotAllowed: the spending-limit policy only allows token transfers",
   3401: "RecipientNotAllowed: this recipient is not on the guardian's merchant allowlist",
-  3402: "NotAllowed: the merchant allowlist only allows token transfers",
+  3400: "NotInstalled: the merchant budget policy is not installed for this rule",
+  3402: "NotAllowed: the merchant budget policy only allows token transfers",
+  3406: "RecipientCapExceeded: this merchant's own cap for the period is used up",
+  3407: "TooManyPayments: the payment-count limit for the period is reached",
   3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
   3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
 };
