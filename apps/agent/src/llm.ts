@@ -187,7 +187,7 @@ class OpenAICompatibleChat implements Chat {
       body = (await res.json()) as any;
       if (res.ok) break;
       if (attempt < MAX_ATTEMPTS && isRetryable(res.status, body)) {
-        await new Promise((r) => setTimeout(r, retryDelayMs() * attempt));
+        await new Promise((r) => setTimeout(r, retryAfterMs(res, body) ?? retryDelayMs() * attempt));
         continue;
       }
       throw new Error(`${this.cfg.label} API ${res.status}: ${body?.error?.message ?? JSON.stringify(body).slice(0, 300)}`);
@@ -225,4 +225,17 @@ export function isRetryable(status: number, body: any): boolean {
   const code = body?.error?.code;
   const message = String(body?.error?.message ?? "");
   return status === 400 && (code === "tool_use_failed" || /Parsing failed/i.test(message));
+}
+
+/**
+ * How long a rate-limited response asks us to wait: the Retry-After header,
+ * or Groq's "Please try again in 6.36s" message. Undefined when neither is present.
+ */
+export function retryAfterMs(res: { headers: { get(name: string): string | null } }, body: any): number | undefined {
+  const header = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(header) && header > 0) return Math.ceil(header * 1000);
+  const m = String(body?.error?.message ?? "").match(/try again in ([\d.]+)\s*(ms|s)/i);
+  if (!m) return undefined;
+  const v = Number(m[1]);
+  return Math.ceil(m[2].toLowerCase() === "ms" ? v : v * 1000) + 250;
 }
