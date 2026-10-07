@@ -21,6 +21,18 @@ APIs, and lets the agent pay **privately** without escaping that cap.
 - The agent can be driven by a **language model** (Groq, Claude or a local
   model) that compares merchants' prices and stays within its budget.
 
+- Any **MCP client** (Claude Desktop, Cursor, ...) can use the guarded wallet
+  through ACAN's MCP server, with the same on-chain limits.
+- The merchant side is **hardened against the published attacks on x402**
+  (request binding, exactly-once delivery, payTo pinning), with a regression
+  test for each.
+
+**Try it without installing anything:** the demo site
+(<https://phoenix-2203.github.io/acan/>) creates a passkey smart account in
+your browser, gives an agent key a capped allowance, and lets you watch the
+smart account refuse a prompt-injected payment on testnet. It also shows the
+live state of this project's own deployment.
+
 Built for the *Find Your Way* hackathon (General Track). Everything runs on
 Stellar **testnet**.
 
@@ -197,12 +209,14 @@ guardian's own browser before the passkey signs anything.
 - **Expiring allowances.** The dashboard can set the rule's `valid_until`
   ledger (1 hour, 1 day or 7 days). After it, the smart account refuses the
   agent's key (`UnvalidatedContext`), with no further action.
-- **Merchant allowlist** (`contracts/merchant-allowlist-policy`). A Soroban
+- **Merchant budget policy** (`contracts/merchant-allowlist-policy`). A Soroban
   policy contract for OpenZeppelin smart accounts: the agent's rule may only
   `transfer` to recipients the guardian picked (the two merchants and the
-  agent's own vault). It is installed next to the spending-limit policy in the
-  same passkey approval, so both must pass for every payment. Any other
-  recipient fails with `RecipientNotAllowed` (#3401).
+  agent's own vault), each with an optional cap of its own per period, plus an
+  optional limit on the number of payments per period. It is installed next to
+  the spending-limit policy in the same passkey approval, so both must pass for
+  every payment. Any other recipient fails with `RecipientNotAllowed` (#3401),
+  a merchant over its cap with `RecipientCapExceeded` (#3406).
 - **One-off approvals.** When the allowance blocks a purchase, the agent can
   ask the guardian. The request appears in the dashboard (through the local
   guardian service, `npm run guardian`). The dashboard decodes the
@@ -210,6 +224,17 @@ guardian's own browser before the passkey signs anything.
   claimed USDC transfer: right token, recipient and amount, from this account,
   with no extra calls. The guardian then signs that single payment with their
   passkey under their own rule, so the agent's allowance is unchanged.
+- **Task budgets.** With `--budget`, the agent starts with no authority and asks
+  for a budget for one task (amount, minutes, merchants). The guardian's passkey
+  turns it into a temporary rule that expires on its own, and unused vault
+  funds are returned afterwards.
+- **Nothing hides from the dashboard.** Agent rules are read from the chain,
+  not only from the browser's memory, so a rule created elsewhere (or after the
+  browser's storage was cleared) still shows up and can be revoked.
+- **Emergency stop and freeze.** One button revokes every live agent rule (one
+  passkey approval each). A freeze switch in the guardian service refuses new
+  agent requests and rejects pending ones. Payments to a recipient the
+  guardian service does not know are flagged in red.
 - **Private-spending panel.** The dashboard shows each confidential settlement
   twice: what the public sees ("hidden") and what the guardian's auditor key
   decrypts, locally on the guardian's machine.
@@ -292,6 +317,37 @@ Tests (offline, also run by CI on every push):
   that runs OpenZeppelin's real smart-account auth with the spending-limit
   policy and the allowlist on one rule.
 
+### 6. Any MCP client
+
+`npm run mcp` starts an MCP server (stdio) with five tools: `acan_list_merchants`,
+`acan_check_budget`, `acan_buy`, `acan_request_approval` and `acan_settle_tabs`.
+Claude Desktop, Claude Code, Cursor or any other MCP client can then shop with the
+guardian's allowance. The model only gets purchasing tools, never keys, and every
+payment is authorized on-chain under the agent's rule. The server reads the same
+`.env` as the CLI agent (`ACAN_MODE=private` for confidential tabs):
+
+```json
+{ "mcpServers": { "acan": { "command": "npx", "args": ["tsx", "/path/to/acan/apps/mcp/src/server.ts"] } } }
+```
+
+### 7. Hardened against published attacks on x402
+
+Two 2026 papers broke x402 deployments in practice: *Five Attacks on x402*
+([arXiv 2605.11781](https://arxiv.org/abs/2605.11781)) and *Free-Riding in the AI
+Economy* ([arXiv 2605.30998](https://arxiv.org/abs/2605.30998)). We checked ACAN
+against each attack and closed the ones that applied. Every row has a test that
+fails without the fix:
+
+| Attack | ACAN's defence | Test |
+|---|---|---|
+| Payment for one resource reused for another of the same price | acan-tab vouchers are signed for one URL; `tabRequestBinding` refuses them elsewhere | `attacks.test.ts` [I3] |
+| Concurrent copies of one payment run the handler many times (stock middleware: several runs per payment) | `PaymentIdempotency` holds an in-flight lock per payment | `attacks.test.ts` [I4] |
+| Paid request whose response is lost: the retry is refused (402) although it was paid | x402 `payment-identifier` extension; the stored response is replayed (`x-acan-replay: 1`), a reused id with another payment gets 409 | `attacks.test.ts` [II] |
+| Paid content kept by shared caches | `Cache-Control: private` on paid responses (asserted) | `attacks.test.ts` [III] |
+| Content delivered before settlement | response buffered until settlement succeeds; failure returns 402 with no data | `attacks.test.ts` [I1] |
+| Malicious server redirects `payTo` | the agent pins each merchant's address and refuses to sign; the on-chain allowlist refuses too | `apps/agent/test/wallet.test.ts`, `apps/mcp/test/mcp.test.ts` |
+| Prompt injection in merchant data | output labelled `untrustedData`; the model can only reach purchasing tools, and the account enforces the limits | on-chain policies |
+
 ---
 
 ## Repository layout
@@ -302,6 +358,9 @@ packages/core           smart-account agent signer, x402 client scheme, smart-ac
                         client, server, facilitator)
 packages/confidential   wrapper over the confidential-token SDK: ConfidentialAccount,
                         ConfidentialVault (policy-capped top-ups), MerchantInbox (decrypts settlements)
+apps/site               demo site (GitHub Pages): in-browser passkey sandbox, live testnet view
+apps/mcp                MCP server exposing the guarded wallet to any MCP client
+deployments             public testnet addresses read by the demo site
 apps/web                guardian dashboard: passkey smart account, grant (limit, expiry, allowlist)
                         and revoke allowances, approval requests, private-spending panel
 apps/merchant           demo x402 merchants A and B: catalog at /, paid data routes (exact + acan-tab)
@@ -344,6 +403,13 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
 - **Preview technology.** The confidential token is built on an OpenZeppelin
   `stellar-contracts` feature branch, and its verifier and circuits are
   **unaudited**. Testnet only; do not use with real value.
+- **Idempotency scope.** The stored responses that make retries safe live in the
+  merchant's memory for 15 minutes; a restarted merchant forgets them. A
+  production merchant would keep them in a shared store (e.g. Redis `SET NX`).
+- **Settlement preemption.** A Stellar `exact` payment is a signed authorization
+  for one transfer to one merchant. Someone who intercepts it in transit could
+  submit it first: the merchant is still paid, but the client may be refused.
+  TLS between agent and merchant prevents this; the protocol itself does not.
 - **Facilitator.** Smart-account payers currently need a facilitator with a
   higher fee ceiling and smart-account-aware event checks (provided here).
 
