@@ -10,6 +10,7 @@ import {
   readAllowance,
   recentPayments,
   revokeAgent,
+  agentRulesOnChain,
   short,
   usdcBalance,
   type Allowance,
@@ -29,6 +30,7 @@ import {
   type GuardianConfig,
   type Approval,
   type AuditReport,
+  setFrozen,
 } from "./guardian";
 import { auditCsv, auditJson, download } from "./audit-export";
 
@@ -38,6 +40,8 @@ type Busy =
   | "connect"
   | "grant"
   | `revoke-${number}`
+  | "revoke-all"
+  | "freeze"
   | `approve-${string}`
   | `reject-${string}`
   | `budget-${string}`;
@@ -92,6 +96,8 @@ export default function App() {
   const [useAllowlist, setUseAllowlist] = useState(true);
   const [audit, setAudit] = useState<AuditReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  /** Agent rule ids that exist on-chain (null = could not read). */
+  const [onChainIds, setOnChainIds] = useState<Set<number> | null>(null);
 
   // Silent restore of a previous passkey session.
   useEffect(() => {
@@ -103,8 +109,25 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     if (!account) return;
-    const g = loadGrants(account);
+    // The chain is the source of truth: list every agent rule on the account,
+    // including ones this browser has no record of.
+    const local = loadGrants(account);
+    const onChain = await agentRulesOnChain().catch(() => null);
+    const discovered: AgentGrant[] = (onChain ?? [])
+      .filter((r) => !local.some((l) => l.ruleId === r.ruleId))
+      .map((r) => ({
+        ruleId: r.ruleId,
+        agentKey: r.agentKey,
+        limitStroops: 0n,
+        periodLedgers: LEDGERS_PER_DAY,
+        validUntil: r.validUntil,
+        task: r.name.startsWith("task") ? r.name : undefined,
+        discovered: true,
+        createdAt: "",
+      }));
+    const g = [...local, ...discovered].sort((a, b) => a.ruleId - b.ruleId);
     setGrants(g);
+    setOnChainIds(onChain ? new Set(onChain.map((r) => r.ruleId)) : null);
     const [seq, bal, pays, ...allow] = await Promise.all([
       currentLedger().catch(() => null),
       usdcBalance(account).catch(() => null),
@@ -223,6 +246,30 @@ export default function App() {
       await revokeAgent(ruleId);
       setNotice(`Rule #${ruleId} deleted. The agent key can no longer spend anything.`);
       await refresh();
+    });
+
+  /** Emergency stop: delete every live agent rule, one passkey approval each. */
+  const revokeAll = () =>
+    run("revoke-all", async () => {
+      const live = grants.filter((g) => allowances[g.ruleId] !== null && (onChainIds?.has(g.ruleId) ?? true));
+      let done = 0;
+      for (const g of live) {
+        setNotice(`Emergency stop: revoking rule #${g.ruleId} (${done + 1} of ${live.length})…`);
+        await revokeAgent(g.ruleId);
+        done++;
+      }
+      setNotice(`Emergency stop complete: ${done} agent rule(s) deleted. No agent key can spend from this wallet.`);
+      await refresh();
+    });
+
+  const liveCount = grants.filter((g) => allowances[g.ruleId] !== null && (onChainIds?.has(g.ruleId) ?? true)).length;
+
+  const toggleFreeze = () =>
+    run("freeze", async () => {
+      const frozen = await setFrozen(!config?.frozen);
+      setConfig((c) => (c ? { ...c, frozen } : c));
+      setNotice(frozen ? "Agent requests frozen; pending ones were rejected." : "Agent requests accepted again.");
+      await refreshGuardian();
     });
 
   const approveReq = (a: Approval) =>
@@ -451,6 +498,16 @@ export default function App() {
         <div className="body">
           <h2>Active allowances</h2>
           {grants.length === 0 && <p className="muted">No agents authorized yet.</p>}
+          {liveCount > 1 && (
+            <div className="stop">
+              <span>
+                {liveCount} agents can spend from this wallet.
+              </span>
+              <button className="danger" onClick={revokeAll} disabled={busy !== null}>
+                {busy === "revoke-all" ? "Stopping…" : `Emergency stop: revoke all ${liveCount}`}
+              </button>
+            </div>
+          )}
           {grants.map((g) => {
             const a = allowances[g.ruleId];
             const spent = a?.spent ?? 0n;
@@ -462,6 +519,7 @@ export default function App() {
                   <span className="mono">Rule #{g.ruleId}</span>
                   <span className="mono muted">agent {short(g.agentKey)}</span>
                   {g.task && <span className="tag">task budget</span>}
+                  {g.discovered && <span className="tag">found on-chain</span>}
                   {a === null && <span className="tag">removed</span>}
                   {a !== null && expiryLabel(g.validUntil, ledger) && (
                     <span className="tag">
@@ -514,7 +572,16 @@ export default function App() {
             {payments.slice(0, 20).map((p) => (
               <li key={p.id}>
                 <span className="mono">{fmt(p.amount)} USDC</span>
-                <span className="muted">to {short(p.to)}</span>
+                {(() => {
+                  const known = config?.recipients.find((r) => r.address === p.to);
+                  return known ? (
+                    <span className="muted">to {known.label}</span>
+                  ) : (
+                    <span className="unknown" title="Not one of the recipients configured in the guardian service">
+                      to {short(p.to)} · unknown recipient
+                    </span>
+                  );
+                })()}
                 <span className="muted">{new Date(p.closedAt).toLocaleTimeString()}</span>
                 <a href={explorer("tx", p.txHash)} target="_blank" rel="noreferrer" className="mono">
                   {p.txHash.slice(0, 10)}…
@@ -529,6 +596,18 @@ export default function App() {
         <div className="step">5</div>
         <div className="body">
           <h2 id="approvals">Approval requests</h2>
+          {config && (
+            <div className={`freeze ${config.frozen ? "on" : ""}`}>
+              <span>
+                {config.frozen
+                  ? "Frozen: agents cannot ask you for approvals or budgets."
+                  : "Agents can ask you to approve a payment or a task budget."}
+              </span>
+              <button className={config.frozen ? "secondary" : "danger"} onClick={toggleFreeze} disabled={busy !== null}>
+                {config.frozen ? "Unfreeze" : "Freeze requests"}
+              </button>
+            </div>
+          )}
           {budgets.length > 0 && (
             <ul className="requests">
               {budgets.map((b) => (

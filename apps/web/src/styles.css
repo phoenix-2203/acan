@@ -120,3 +120,7 @@ footer { text-align: center; font-size: 12px; margin-top: 28px; }
 input.cap { width: 110px; flex: none; }
 label.inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-direction: row; font-size: 14px; }
 @media (max-width: 520px) { .recipient-row { flex-wrap: wrap; } .recipient-row .check.sub { padding-left: 0; } }
+.stop { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--danger); border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 14px; }
+.freeze { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+.freeze.on { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.unknown { color: var(--danger); font-weight: 600; }
