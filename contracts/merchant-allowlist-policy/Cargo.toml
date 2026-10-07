@@ -1,0 +1,18 @@
+[package]
+name = "acan-merchant-allowlist-policy"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "OpenZeppelin smart-account policy: a context rule may only transfer to an allowlist of recipients"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
