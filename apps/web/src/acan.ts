@@ -36,6 +36,8 @@ export interface AgentGrant {
   caps?: string[];
   /** Payments allowed per period by the merchant budget policy (0 = no limit). */
   maxPayments?: number;
+  /** Set when the rule is a task budget the agent asked for. */
+  task?: string;
   createdAt: string;
 }
 
@@ -76,6 +78,8 @@ export async function grantAgent(
   expiresInLedgers?: number,
   /** Only allow transfers to these recipients, each with an optional cap (ACAN merchant budget policy). */
   allowlist?: { policy: string; recipients: RecipientCap[]; maxPayments: number },
+  /** Label the rule as a task budget. */
+  task?: string,
 ): Promise<AgentGrant> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
@@ -123,6 +127,7 @@ export async function grantAgent(
     recipients: allowlist?.recipients.map((r) => r.address),
     caps: allowlist?.recipients.map((r) => r.cap.toString()),
     maxPayments: allowlist?.maxPayments,
+    task,
     createdAt: new Date().toISOString(),
   };
   saveGrants(account, [...loadGrants(account).filter((g) => g.ruleId !== ruleId), grant]);

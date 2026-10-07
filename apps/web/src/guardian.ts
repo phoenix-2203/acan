@@ -94,3 +94,32 @@ export async function fetchConfig(): Promise<GuardianConfig> {
   if (!r.ok) throw new Error(`guardian service: HTTP ${r.status}`);
   return r.json();
 }
+
+export interface BudgetRequest {
+  id: string;
+  createdAt: number;
+  status: "pending" | "approved" | "rejected" | "expired";
+  agentKey: string;
+  amount: string;
+  amountUsdc: string;
+  minutes: number;
+  recipients: { address: string; label: string }[];
+  task: string;
+  reason: string;
+  ruleId?: number;
+}
+
+export async function fetchBudgets(): Promise<BudgetRequest[]> {
+  const r = await fetch(`${GUARDIAN_URL}/budgets`);
+  if (!r.ok) throw new Error(`guardian service: HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function reportBudget(id: string, outcome: { ruleId: number } | "reject"): Promise<void> {
+  const r = await fetch(`${GUARDIAN_URL}/budgets/${id}/${outcome === "reject" ? "reject" : "approve"}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: outcome === "reject" ? undefined : JSON.stringify(outcome),
+  });
+  if (!r.ok) throw new Error((await r.json()).error ?? `HTTP ${r.status}`);
+}
