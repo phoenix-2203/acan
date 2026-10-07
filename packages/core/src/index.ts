@@ -6,3 +6,4 @@ export * from "./stellar.js";
 export * from "./facilitator.js";
 export * from "./smart-account-transfer.js";
 export * from "./tab/index.js";
+export * from "./merchant-guards.js";
