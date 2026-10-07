@@ -19,6 +19,7 @@
     "merchant:b": "MERCHANT_PROFILE=b tsx apps/merchant/src/server.ts",
     "agent": "tsx apps/agent/src/agent.ts",
     "web": "npm run dev -w @acan/web",
+    "site": "npm run dev -w @acan/site",
     "diagnose": "tsx scripts/diagnose.ts",
     "agent:private": "tsx apps/agent/src/agent-private.ts",
     "agent:ai": "tsx apps/agent/src/agent-ai.ts",

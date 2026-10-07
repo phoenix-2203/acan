@@ -1,0 +1,15 @@
+import raw from "../../../deployments/testnet.json";
+
+/** Public addresses of ACAN's own testnet deployment (deployments/testnet.json). */
+export interface Deployment {
+  smartAccount: string;
+  agent: string;
+  agentRuleId: number;
+  agentVault?: string;
+  merchants: { name: string; address: string }[];
+  merchantPolicy?: { address: string; version: string };
+}
+
+export const DEPLOYMENT = raw as Deployment;
+
+export const REPO_URL = "https://github.com/phoenix-2203/acan";
