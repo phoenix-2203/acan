@@ -60,6 +60,18 @@ Total settled to the merchant: 0.07 USDC in 3 confidential transfer(s).
 Merchant's ledger: owed 0.07 USDC, settled 0.07 USDC (MATCHES the decrypted total).
 ```
 
+**AI agent, public mode** (Groq `openai/gpt-oss-120b`, rule with a 0.20 USDC/day
+limit, a 7-day expiry and the merchant allowlist). Asked for the latest ledger and an
+account's USDC balance, the model read both catalogs, checked its budget, and bought
+each item from the cheaper merchant:
+
+| Purchase | Merchant | Price | Transaction |
+|---|---|---|---|
+| `/api/ledger` | Southgate Data | 0.005 USDC | [`4110196d…`](https://stellar.expert/explorer/testnet/tx/4110196d891558c3fd6f64fb17cc81598e14c2075b751f3ee8a8ce080fe253ce) |
+| `/api/balance` | Northwind Data | 0.02 USDC | [`d3d376f7…`](https://stellar.expert/explorer/testnet/tx/d3d376f710a1a068d67693e1f74c795b797ea849937ebfd0c03ba4bbda7c8d62) |
+
+Both payments passed the spending-limit policy and the allowlist policy on-chain.
+
 ---
 
 ## How it works
