@@ -174,6 +174,7 @@ async function main() {
   chat.say(TASK);
 
   let answer: string | undefined;
+  let failure: unknown;
   try {
     for (let step = 1; step <= MAX_STEPS && answer === undefined; step++) {
       const turn = await chat.next();
@@ -192,6 +193,13 @@ async function main() {
       }
       chat.results(results);
     }
+  } catch (e) {
+    // The model or its API failed mid-run. Purchases already made are real:
+    // still settle what is owed and report it, then exit with the error.
+    failure = e;
+    console.error(`\n${bold("Model error:")} ${e instanceof Error ? e.message : e}`);
+  }
+  try {
     if (mode === "private") {
       for (const m of merchantsUsed) await wallet.closeTab(m);
     }
@@ -211,6 +219,7 @@ async function main() {
   }
   const after = await wallet.allowance();
   console.log(`allowance left ${after.remainingUsdc} of ${after.limitUsdc} USDC`);
+  if (failure) process.exitCode = 1;
 }
 
 main().catch(async (e) => {
