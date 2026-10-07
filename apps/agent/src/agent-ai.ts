@@ -102,6 +102,8 @@ const wallet = new AgentWallet(mode, (l) => log(l));
 const spent: { merchant: string; path: string; price: string; receipt?: string }[] = [];
 const merchantsUsed = new Set<string>();
 let approvalsAsked = 0;
+/** URLs whose purchase the smart account refused: the only ones approval may be asked for. */
+const blocked = new Set<string>();
 let catalogs: Record<string, any> = {};
 
 async function runTool(call: ToolCall): Promise<{ output: string; done?: string }> {
@@ -147,8 +149,17 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       }
       if (mode === "private" && !merchantsUsed.has(merchant)) await wallet.syncTab(merchant);
       const url = `${merchant}${path}${query ? `?${query}` : ""}`;
-      if (call.name === "request_approval" && approvalsAsked++ > 0) {
-        return { output: JSON.stringify({ error: "only one approval request per run" }) };
+      if (call.name === "request_approval") {
+        // Enforced here, not left to the prompt: approval is only for a purchase
+        // the allowance actually refused, and only once per run.
+        if (!blocked.has(url)) {
+          log(`   ${bold("REJECTED")} approval request for ${path}: buy it first; ask only if the allowance blocks it`);
+          return { output: JSON.stringify({ error: "request_approval is only allowed after buy was blocked for this exact purchase; call buy first" }) };
+        }
+        if (approvalsAsked++ > 0) {
+          log(`   ${bold("REJECTED")} second approval request (one per run)`);
+          return { output: JSON.stringify({ error: "only one approval request per run" }) };
+        }
       }
       const r =
         call.name === "buy"
@@ -160,6 +171,7 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
         spent.push({ merchant: name, path, price: r.priceUsdc ?? "?", receipt: r.receipt });
         log(`   ${bold("PAID")} ${r.priceUsdc} USDC to ${name} for ${path}  ${dim(r.receipt ?? "")}`);
       } else {
+        if (r.status === "blocked") blocked.add(url);
         log(`   ${bold(r.status.toUpperCase())} ${path} at ${name}: ${r.reason}`);
       }
       return { output: JSON.stringify(r.ok ? { paidUsdc: r.priceUsdc, data: r.data } : { status: r.status, reason: r.reason }) };
