@@ -86,6 +86,29 @@ Settled to merchant A: 0.11 USDC in 5 confidential transfer(s); merchant's ledge
 Settled to merchant B: 0.01 USDC in 1 confidential transfer(s); merchant's ledger: owed 0.01 USDC, settled 0.01 USDC (MATCHES the decrypted total).
 ```
 
+**Merchant allowlist.** `npm run demo:allowlist`: the agent's key tries to pay the
+guardian's own treasury, which is not on the allowlist. The smart account refuses during
+authorization; nothing is sent:
+
+```
+REFUSED by the smart account: RecipientNotAllowed: this recipient is not on the guardian's merchant allowlist
+```
+
+**Guardian approval.** With 0.015 USDC of allowance left, the AI agent tried a 0.02 USDC
+purchase. The smart account blocked it (`SpendingLimitExceeded`); the agent asked the
+guardian; the dashboard decoded the authorization, the guardian approved it with their
+passkey 16 seconds later, and the payment settled
+([`faf52259…`](https://stellar.expert/explorer/testnet/tx/faf52259371a1f83487594e95a95d742073ab9ef7875908e4d9d631c37750b1d)).
+The agent's allowance was unchanged afterwards (still 0.015 USDC): the approval covered
+that one payment only.
+
+```
+BLOCKED /api/balance at Northwind Data: blocked by the smart account: SpendingLimitExceeded
+waiting up to 4 min for the guardian to approve 0.02 USDC to Northwind Data …
+APPROVED with the guardian's passkey
+PAID 0.02 USDC to Northwind Data for /api/balance
+```
+
 ---
 
 ## How it works
