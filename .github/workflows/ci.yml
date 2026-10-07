@@ -6,7 +6,7 @@ on:
 
 jobs:
   typescript:
-    name: TypeScript (typecheck, tests, dashboard build)
+    name: TypeScript (typecheck, tests, dashboard and site builds)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -30,6 +30,8 @@ jobs:
         run: npm test
       - name: Build the guardian dashboard
         run: npm run build -w @acan/web
+      - name: Build the demo site
+        run: npm run build -w @acan/site
 
   contracts:
     name: Soroban contract (tests, wasm build)
