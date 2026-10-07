@@ -19,7 +19,12 @@
  * FACILITATOR=public uses x402.org for `exact` only.
  */
 import express from "express";
-import { paymentMiddlewareFromConfig } from "@x402/express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import {
+  PAYMENT_IDENTIFIER,
+  declarePaymentIdentifierExtension,
+  paymentIdentifierResourceServerExtension,
+} from "@x402/extensions/payment-identifier";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { ExactStellarScheme as ExactStellarServer } from "@x402/stellar/exact/server";
@@ -27,6 +32,7 @@ import { createEd25519Signer } from "@x402/stellar";
 import { rpc } from "@stellar/stellar-sdk";
 import { StrKey } from "@stellar/stellar-sdk";
 import {
+  PaymentIdempotency,
   SmartAccountAwareFacilitator,
   TESTNET,
   TabFacilitatorScheme,
@@ -34,6 +40,7 @@ import {
   TabServerScheme,
   loadEnv,
   requireEnv,
+  tabRequestBinding,
   stroopsToUsdc,
   tabToJson,
   tokenBalance,
@@ -126,13 +133,18 @@ const accepts = (price: string) => [
   ...(PRIVATE_ENABLED ? [{ scheme: "acan-tab", price, network: TESTNET.x402Network, payTo: PAY_TO }] : []),
 ];
 
-const routes = Object.fromEntries(
-  profile.products.map((p) => [`GET ${p.path}`, { accepts: accepts(p.price), description: p.description }]),
-);
+// Every paid route declares the x402 payment-identifier extension, so a
+// client can retry a paid request safely (see PaymentIdempotency below).
+const extensions = { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(false) };
+const routes: Record<string, { accepts: ReturnType<typeof accepts>; description: string; extensions: typeof extensions }> =
+  Object.fromEntries(
+    profile.products.map((p) => [`GET ${p.path}`, { accepts: accepts(p.price), description: p.description, extensions }]),
+  );
 // Backwards-compatible alias used by earlier versions of the private agent.
 routes["GET /api/insight-private"] = {
   accepts: accepts(profile.products[0].price).filter((a) => a.scheme === "acan-tab"),
   description: profile.products[0].description,
+  extensions,
 };
 if (!PRIVATE_ENABLED) delete routes["GET /api/insight-private"];
 
@@ -168,25 +180,28 @@ app.post("/tab/settle", async (req, res) => {
   }
 });
 
-app.use(
-  paymentMiddlewareFromConfig(routes, facilitator, [
-    { network: TESTNET.x402Network, server: new ExactStellarServer() },
-    ...(PRIVATE_ENABLED
-      ? [
-          {
-            network: TESTNET.x402Network,
-            server: new TabServerScheme({
-              confidentialToken: CONFIDENTIAL_TESTNET.contracts.token,
-              underlying: CONFIDENTIAL_TESTNET.contracts.underlying,
-              decimals: CONFIDENTIAL_TESTNET.decimals,
-              creditLimit: CREDIT_LIMIT,
-              tabUrl: "/tab",
-            }),
-          },
-        ]
-      : []),
-  ]),
-);
+// Guards in front of the x402 middleware (packages/core/src/merchant-guards.ts):
+// a voucher only pays for the URL it was signed for, and one payment is
+// served once (retries get the stored response, concurrent copies wait).
+app.use(tabRequestBinding());
+app.use(new PaymentIdempotency().middleware());
+
+const resourceServer = new x402ResourceServer(facilitator)
+  .register(TESTNET.x402Network, new ExactStellarServer())
+  .registerExtension(paymentIdentifierResourceServerExtension);
+if (PRIVATE_ENABLED) {
+  resourceServer.register(
+    TESTNET.x402Network,
+    new TabServerScheme({
+      confidentialToken: CONFIDENTIAL_TESTNET.contracts.token,
+      underlying: CONFIDENTIAL_TESTNET.contracts.underlying,
+      decimals: CONFIDENTIAL_TESTNET.decimals,
+      creditLimit: CREDIT_LIMIT,
+      tabUrl: "/tab",
+    }),
+  );
+}
+app.use(paymentMiddleware(routes, resourceServer));
 
 // ---- the data products (served only after payment) ----
 
