@@ -73,6 +73,9 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
   const [config, setConfig] = useState<GuardianConfig | null>(null);
   const [allowOnly, setAllowOnly] = useState<Record<string, boolean>>({});
+  /** Per-recipient cap in USDC as typed ("" = no cap). */
+  const [caps, setCaps] = useState<Record<string, string>>({});
+  const [maxPayments, setMaxPayments] = useState("");
   const [useAllowlist, setUseAllowlist] = useState(true);
   const [audit, setAudit] = useState<AuditReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -185,7 +188,10 @@ export default function App() {
         config?.allowlistPolicy && useAllowlist
           ? {
               policy: config.allowlistPolicy,
-              recipients: config.recipients.filter((r) => allowOnly[r.address]).map((r) => r.address),
+              recipients: config.recipients
+                .filter((r) => allowOnly[r.address])
+                .map((r) => ({ address: r.address, cap: caps[r.address]?.trim() ? usdcToStroops(caps[r.address].trim()) : 0n })),
+              maxPayments: maxPayments.trim() ? Number(maxPayments.trim()) : 0,
             }
           : undefined;
       const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period, expiry || undefined, allowlist);
@@ -337,19 +343,47 @@ export default function App() {
             <fieldset className="allowlist">
               <label className="check">
                 <input type="checkbox" checked={useAllowlist} onChange={(e) => setUseAllowlist(e.target.checked)} />
-                Only allow payments to these recipients (merchant allowlist contract)
+                Only allow payments to these recipients (merchant budget contract)
               </label>
-              {useAllowlist &&
-                config.recipients.map((r) => (
-                  <label className="check sub" key={r.address}>
+              {useAllowlist && (
+                <>
+                  {config.recipients.map((r) => (
+                    <div className="recipient-row" key={r.address}>
+                      <label className="check sub">
+                        <input
+                          type="checkbox"
+                          checked={!!allowOnly[r.address]}
+                          onChange={(e) => setAllowOnly({ ...allowOnly, [r.address]: e.target.checked })}
+                        />
+                        {r.label} <span className="mono muted">{short(r.address)}</span>
+                      </label>
+                      <input
+                        className="cap"
+                        placeholder="no cap"
+                        inputMode="decimal"
+                        aria-label={`Cap for ${r.label} (USDC per period)`}
+                        value={caps[r.address] ?? ""}
+                        disabled={!allowOnly[r.address]}
+                        onChange={(e) => setCaps({ ...caps, [r.address]: e.target.value })}
+                      />
+                    </div>
+                  ))}
+                  <p className="muted small">
+                    Caps are USDC per period for each recipient, on top of the overall allowance. Leave blank for no
+                    cap.
+                  </p>
+                  <label className="inline">
+                    Max payments per period
                     <input
-                      type="checkbox"
-                      checked={!!allowOnly[r.address]}
-                      onChange={(e) => setAllowOnly({ ...allowOnly, [r.address]: e.target.checked })}
+                      className="cap"
+                      placeholder="no limit"
+                      inputMode="numeric"
+                      value={maxPayments}
+                      onChange={(e) => setMaxPayments(e.target.value.replace(/[^0-9]/g, ""))}
                     />
-                    {r.label} <span className="mono muted">{short(r.address)}</span>
                   </label>
-                ))}
+                </>
+              )}
             </fieldset>
           )}
           <button onClick={grant} disabled={!account || busy !== null || !agentKey.trim()}>
@@ -382,7 +416,15 @@ export default function App() {
                 </div>
                 {g.recipients && (
                   <div className="muted small">
-                    May only pay: {g.recipients.map((r) => config?.recipients.find((x) => x.address === r)?.label ?? short(r)).join(", ")}
+                    May only pay:{" "}
+                    {g.recipients
+                      .map((r, i) => {
+                        const label = config?.recipients.find((x) => x.address === r)?.label ?? short(r);
+                        const cap = g.caps?.[i];
+                        return cap && cap !== "0" ? `${label} (max ${fmt(BigInt(cap))})` : label;
+                      })
+                      .join(", ")}
+                    {g.maxPayments ? `; at most ${g.maxPayments} payments ${periodLabel(g.periodLedgers)}` : ""}
                   </div>
                 )}
                 <div className="meter" aria-label={`${pct}% of allowance used`}>

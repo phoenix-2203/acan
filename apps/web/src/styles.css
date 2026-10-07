@@ -115,3 +115,8 @@ footer { text-align: center; font-size: 12px; margin-top: 28px; }
 .check input { width: auto; margin: 0; }
 .banner.attention { background: var(--accent); color: var(--accent-ink); position: sticky; top: 8px; z-index: 5; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); }
 .banner.attention .link { color: var(--accent-ink); text-decoration: underline; font-weight: 600; }
+.recipient-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.recipient-row .check.sub { flex: 1; }
+input.cap { width: 110px; flex: none; }
+label.inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-direction: row; font-size: 14px; }
+@media (max-width: 520px) { .recipient-row { flex-wrap: wrap; } .recipient-row .check.sub { padding-left: 0; } }

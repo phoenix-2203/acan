@@ -1,4 +1,4 @@
-import { Address, StrKey, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { StrKey, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   IndexedDBStorage,
   SmartAccountKit,
@@ -8,6 +8,7 @@ import {
   type ContextRule,
 } from "smart-account-kit";
 import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, stroopsToUsdc } from "@acan/core/browser";
+import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
 
 export const kit = new SmartAccountKit({
   rpcUrl: TESTNET.rpcUrl,
@@ -29,8 +30,12 @@ export interface AgentGrant {
   periodLedgers: number;
   /** Ledger after which the rule stops authorizing anything (undefined = never). */
   validUntil?: number;
-  /** Recipients the rule may pay (merchant allowlist policy), if installed. */
+  /** Recipients the rule may pay (merchant budget policy), if installed. */
   recipients?: string[];
+  /** Per-recipient caps in atomic units as strings ("0" = no cap), aligned with `recipients`. */
+  caps?: string[];
+  /** Payments allowed per period by the merchant budget policy (0 = no limit). */
+  maxPayments?: number;
   createdAt: string;
 }
 
@@ -69,8 +74,8 @@ export async function grantAgent(
   periodLedgers: number,
   /** Expire the allowance this many ledgers from now (undefined = never). */
   expiresInLedgers?: number,
-  /** Only allow transfers to these addresses (ACAN merchant allowlist policy). */
-  allowlist?: { policy: string; recipients: string[] },
+  /** Only allow transfers to these recipients, each with an optional cap (ACAN merchant budget policy). */
+  allowlist?: { policy: string; recipients: RecipientCap[]; maxPayments: number },
 ): Promise<AgentGrant> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
@@ -87,8 +92,14 @@ export async function grantAgent(
   const validUntil = expiresInLedgers ? (await currentLedger()) + expiresInLedgers : undefined;
   const policies = new Map<string, unknown>([[OZ_SMART_ACCOUNT.spendingLimitPolicy, policyParams]]);
   if (allowlist) {
-    if (allowlist.recipients.length === 0) throw new Error("Pick at least one allowed recipient");
-    policies.set(allowlist.policy, allowlistParams(allowlist.recipients));
+    policies.set(
+      allowlist.policy,
+      encodeMerchantPolicyParams({
+        recipients: allowlist.recipients,
+        periodLedgers,
+        maxPayments: allowlist.maxPayments,
+      }),
+    );
   }
   // One passkey approval installs the rule with all its policies at once.
   const tx = await kit.rules.add(
@@ -109,24 +120,13 @@ export async function grantAgent(
     limitStroops,
     periodLedgers,
     validUntil,
-    recipients: allowlist?.recipients,
+    recipients: allowlist?.recipients.map((r) => r.address),
+    caps: allowlist?.recipients.map((r) => r.cap.toString()),
+    maxPayments: allowlist?.maxPayments,
     createdAt: new Date().toISOString(),
   };
   saveGrants(account, [...loadGrants(account).filter((g) => g.ruleId !== ruleId), grant]);
   return grant;
-}
-
-/** `AllowlistParams { recipients: Vec<Address> }` as the contract expects it. */
-function allowlistParams(recipients: string[]): xdr.ScVal {
-  for (const r of recipients) {
-    if (!StrKey.isValidEd25519PublicKey(r) && !StrKey.isValidContract(r)) throw new Error(`Invalid recipient ${r}`);
-  }
-  return xdr.ScVal.scvMap([
-    new xdr.ScMapEntry({
-      key: xdr.ScVal.scvSymbol("recipients"),
-      val: xdr.ScVal.scvVec(recipients.map((r) => xdr.ScVal.scvAddress(Address.fromString(r).toScAddress()))),
-    }),
-  ]);
 }
 
 /** Revoke instantly by deleting the agent's context rule. */
