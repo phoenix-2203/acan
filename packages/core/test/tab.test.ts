@@ -7,6 +7,9 @@ import { paymentMiddlewareFromConfig } from "@x402/express";
 import type { HTTPFacilitatorClient } from "@x402/core/server";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { x402Client, x402HTTPClient } from "@x402/fetch";
+import { ExactStellarScheme as ExactStellarServer } from "@x402/stellar/exact/server";
+import { createEd25519Signer } from "@x402/stellar";
+import { SmartAccountAwareFacilitator } from "../src/facilitator.js";
 import {
   TabClientScheme,
   TabFacilitatorScheme,
@@ -96,13 +99,27 @@ test("x402 end to end: vouchers per request, one settlement per credit window", 
   const inbox = { async lookup(tx: string) { return chain.get(tx) ?? null; } };
 
   const ledger = new TabLedger();
-  const facilitator = new x402Facilitator().register(NETWORK, new TabFacilitatorScheme(ledger, inbox, merchant));
+  const facilitator = new x402Facilitator()
+    .register(NETWORK, new SmartAccountAwareFacilitator([createEd25519Signer(Keypair.random().secret(), NETWORK)]))
+    .register(NETWORK, new TabFacilitatorScheme(ledger, inbox, merchant));
   const app = express();
   app.use(
     paymentMiddlewareFromConfig(
-      { "GET /paid": { accepts: { scheme: "acan-tab", price: "$0.01", network: NETWORK, payTo: merchant }, description: "t" } },
+      {
+        "GET /paid": {
+          // Offered alongside "exact" as a real merchant does; this client only speaks acan-tab.
+          accepts: [
+            { scheme: "exact", price: "$0.01", network: NETWORK, payTo: merchant },
+            { scheme: "acan-tab", price: "$0.01", network: NETWORK, payTo: merchant },
+          ],
+          description: "t",
+        },
+      },
       facilitator as unknown as HTTPFacilitatorClient,
-      [{ network: NETWORK, server: new TabServerScheme({ confidentialToken: TOKEN, underlying: USDC, decimals: 7, creditLimit: LIMIT }) }],
+      [
+        { network: NETWORK, server: new ExactStellarServer() },
+        { network: NETWORK, server: new TabServerScheme({ confidentialToken: TOKEN, underlying: USDC, decimals: 7, creditLimit: LIMIT }) },
+      ],
     ),
   );
   app.get("/paid", (_req, res) => {
@@ -126,7 +143,8 @@ test("x402 end to end: vouchers per request, one settlement per credit window", 
       const first = await fetch(url);
       assert.equal(first.status, 402);
       const required = http.getPaymentRequiredResponse((n) => first.headers.get(n));
-      assert.equal(required.accepts[0].extra.creditLimit, LIMIT.toString());
+      const tabReq = required.accepts.find((a) => a.scheme === "acan-tab")!;
+      assert.equal(tabReq.extra.creditLimit, LIMIT.toString());
       const payload = await client.createPaymentPayload(required);
       const paid = await fetch(url, { headers: http.encodePaymentSignatureHeader(payload) });
       assert.equal(paid.status, 200, `request ${i}: ${paid.headers.get("PAYMENT-REQUIRED") ?? ""}`);
