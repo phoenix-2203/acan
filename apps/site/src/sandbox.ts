@@ -32,7 +32,7 @@ import {
   encodeMerchantPolicyParams,
   smartAccountTransfer,
 } from "@acan/core/browser";
-import { latestLedger, read, u32 } from "./chain";
+import { contextRules, latestLedger, read, u32 } from "./chain";
 import { encodeAllowlistV1 } from "./policy-v1";
 
 export const XLM = ASSETS.xlm.sac;
@@ -209,7 +209,17 @@ export class Sandbox {
     const simulated = tx.result as ContextRule | undefined;
     const result = await this.kit.signAndSubmitAdmin(tx);
     if (!result.success) throw new Error(result.error?.message ?? "The rule was not created");
-    const ruleId = typeof simulated?.id === "number" ? simulated.id : (await this.kit.rules.count()) - 1;
+    // Rule ids stay sparse after revocations, so the count is not the new id:
+    // fall back to finding the agent's rule on-chain.
+    const ruleId =
+      typeof simulated?.id === "number"
+        ? simulated.id
+        : Math.max(
+            ...(await contextRules(this.state.contractId!))
+              .filter((r) => r.signers.some((x) => x.kind === "ed25519" && x.key === this.agent.publicKey()))
+              .map((r) => r.id),
+          );
+    if (!Number.isInteger(ruleId)) throw new Error("The rule was created but its id could not be read back; reload the page");
     const grant: SavedGrant = {
       ruleId,
       limit: s.limit.toString(),
