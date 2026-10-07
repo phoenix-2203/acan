@@ -3,18 +3,21 @@
  * spendable balance, then withdraw them to the merchant's public USDC
  * balance (one withdraw proof). The withdrawn amount is public.
  *
- * Usage: npm run merchant:cashout
+ * Usage: npm run merchant:cashout            (merchant A)
+ *        MERCHANT_PROFILE=b npm run merchant:cashout   (merchant B)
  */
 import { explorerTx, loadEnv, requireEnv, stroopsToUsdc, tokenBalance } from "@acan/core";
 import { ConfidentialAccount } from "@acan/confidential";
 
 loadEnv();
 
+const P = (process.env.MERCHANT_PROFILE ?? "a").toLowerCase() === "b" ? "MERCHANT_B" : "MERCHANT";
+
 async function main() {
-  const address = requireEnv("MERCHANT_ADDRESS");
+  const address = requireEnv(`${P}_ADDRESS`);
   const acct = new ConfidentialAccount({
-    secret: requireEnv("MERCHANT_SECRET"),
-    ctSecretHex: requireEnv("MERCHANT_CT_SK"),
+    secret: requireEnv(`${P}_SECRET`),
+    ctSecretHex: requireEnv(`${P}_CT_SK`),
     statePath: `.acan/ct-${address}.json`,
   });
   try {

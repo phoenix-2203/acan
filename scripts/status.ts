@@ -8,7 +8,9 @@ const line = (k: string, v: string) => console.log(`${k.padEnd(26)} ${v}`);
 async function main() {
   const env = process.env;
   if (env.TREASURY_ADDRESS) line("Treasury USDC", `${stroopsToUsdc(await tokenBalance(env.TREASURY_ADDRESS))}`);
-  if (env.MERCHANT_ADDRESS) line("Merchant USDC", `${stroopsToUsdc(await tokenBalance(env.MERCHANT_ADDRESS))}`);
+  if (env.MERCHANT_ADDRESS) line("Merchant A USDC", `${stroopsToUsdc(await tokenBalance(env.MERCHANT_ADDRESS))}`);
+  if (env.MERCHANT_B_ADDRESS) line("Merchant B USDC", `${stroopsToUsdc(await tokenBalance(env.MERCHANT_B_ADDRESS))}`);
+  if (env.AGENT_VAULT_ADDRESS) line("Agent vault USDC (public)", `${stroopsToUsdc(await tokenBalance(env.AGENT_VAULT_ADDRESS))}`);
   if (!env.SMART_ACCOUNT) {
     line("Smart account", "not set yet (create it in the dashboard, then paste into .env)");
     return;
