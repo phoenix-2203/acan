@@ -21,14 +21,25 @@ import {
   checkRequest,
   fetchApprovals,
   fetchAudit,
+  fetchBudgets,
   fetchConfig,
   reject,
+  reportBudget,
+  type BudgetRequest,
   type GuardianConfig,
   type Approval,
   type AuditReport,
 } from "./guardian";
 
-type Busy = null | "create" | "connect" | "grant" | `revoke-${number}` | `approve-${string}` | `reject-${string}`;
+type Busy =
+  | null
+  | "create"
+  | "connect"
+  | "grant"
+  | `revoke-${number}`
+  | `approve-${string}`
+  | `reject-${string}`
+  | `budget-${string}`;
 
 const PERIODS = [
   { label: "per hour", ledgers: LEDGERS_PER_HOUR },
@@ -71,6 +82,7 @@ export default function App() {
   const [expiry, setExpiry] = useState(0);
   const [ledger, setLedger] = useState<number | null>(null);
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
+  const [budgets, setBudgets] = useState<BudgetRequest[]>([]);
   const [config, setConfig] = useState<GuardianConfig | null>(null);
   const [allowOnly, setAllowOnly] = useState<Record<string, boolean>>({});
   /** Per-recipient cap in USDC as typed ("" = no cap). */
@@ -116,6 +128,11 @@ export default function App() {
   }, []);
 
   const refreshGuardian = useCallback(async () => {
+    try {
+      setBudgets(await fetchBudgets());
+    } catch {
+      setBudgets([]);
+    }
     try {
       setApprovals(await fetchApprovals());
     } catch {
@@ -222,9 +239,43 @@ export default function App() {
     });
 
   const pending = (approvals ?? []).filter((a) => a.status === "pending");
+  const pendingBudgets = budgets.filter((b) => b.status === "pending");
+  const waiting = pending.length + pendingBudgets.length;
   useEffect(() => {
-    document.title = pending.length ? `(${pending.length}) Approval needed · ACAN` : "ACAN guardian";
-  }, [pending.length]);
+    document.title = waiting ? `(${waiting}) Approval needed · ACAN` : "ACAN guardian";
+  }, [waiting]);
+
+  const approveBudget = (b: BudgetRequest) =>
+    run(`budget-${b.id}`, async () => {
+      // One passkey approval creates a rule that ends by itself: the budget is
+      // both the spending limit and the period, and the rule expires with it.
+      const ledgers = b.minutes * 12; // ~5 s per ledger
+      const g = await grantAgent(
+        b.agentKey,
+        BigInt(b.amount),
+        ledgers,
+        ledgers,
+        config?.allowlistPolicy
+          ? {
+              policy: config.allowlistPolicy,
+              recipients: b.recipients.map((r) => ({ address: r.address, cap: 0n })),
+              maxPayments: 0,
+            }
+          : undefined,
+        b.task || b.reason,
+      );
+      await reportBudget(b.id, { ruleId: g.ruleId });
+      setNotice(`Task budget approved: rule #${g.ruleId}, ${b.amountUsdc} USDC for ${b.minutes} min. It expires on its own.`);
+      await refresh();
+      await refreshGuardian();
+    });
+
+  const rejectBudget = (b: BudgetRequest) =>
+    run(`budget-${b.id}`, async () => {
+      await reportBudget(b.id, "reject");
+      setNotice(`Budget request for ${b.amountUsdc} USDC rejected.`);
+      await refreshGuardian();
+    });
 
   const nameOf = (addr?: string) => (addr ? audit?.names[addr] ?? short(addr) : "");
 
@@ -244,10 +295,12 @@ export default function App() {
 
       {error && <div className="banner error">{error}</div>}
       {notice && <div className="banner ok">{notice}</div>}
-      {pending.length > 0 && (
+      {waiting > 0 && (
         <div className="banner attention" role="alert">
-          Your agent is asking you to approve {pending[0].amountUsdc} USDC to {pending[0].merchant}
-          {pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}.{" "}
+          {pendingBudgets.length > 0
+            ? `Your agent is asking for a task budget of ${pendingBudgets[0].amountUsdc} USDC for ${pendingBudgets[0].minutes} min`
+            : `Your agent is asking you to approve ${pending[0].amountUsdc} USDC to ${pending[0].merchant}`}
+          {waiting > 1 ? ` (+${waiting - 1} more)` : ""}.{" "}
           <button className="link" onClick={() => document.getElementById("approvals")?.scrollIntoView({ behavior: "smooth" })}>
             Review
           </button>
@@ -407,6 +460,7 @@ export default function App() {
                 <div className="grant-head">
                   <span className="mono">Rule #{g.ruleId}</span>
                   <span className="mono muted">agent {short(g.agentKey)}</span>
+                  {g.task && <span className="tag">task budget</span>}
                   {a === null && <span className="tag">removed</span>}
                   {a !== null && expiryLabel(g.validUntil, ledger) && (
                     <span className="tag">
@@ -474,6 +528,37 @@ export default function App() {
         <div className="step">5</div>
         <div className="body">
           <h2 id="approvals">Approval requests</h2>
+          {budgets.length > 0 && (
+            <ul className="requests">
+              {budgets.map((b) => (
+                <li key={b.id} className={`request ${b.status}`}>
+                  <div className="request-head">
+                    <span className="mono big">{b.amountUsdc} USDC</span>
+                    <span>task budget for {b.minutes} min</span>
+                    <span className="tag">{b.status}{b.ruleId !== undefined ? ` · rule #${b.ruleId}` : ""}</span>
+                  </div>
+                  <div className="muted">“{b.reason}”</div>
+                  {b.task && <div className="muted small">Task: {b.task}</div>}
+                  <div className="muted small">
+                    Only: {b.recipients.map((r) => r.label || short(r.address)).join(", ")}
+                  </div>
+                  {b.status === "pending" &&
+                    (b.agentKey !== config?.agentAddress && config?.agentAddress ? (
+                      <div className="banner error">Refusing: this request is for a different agent key.</div>
+                    ) : (
+                      <div className="row">
+                        <button onClick={() => approveBudget(b)} disabled={busy !== null || !account}>
+                          {busy === `budget-${b.id}` ? "Waiting for passkey…" : "Approve budget with passkey"}
+                        </button>
+                        <button className="ghost" onClick={() => rejectBudget(b)} disabled={busy !== null}>
+                          Reject
+                        </button>
+                      </div>
+                    ))}
+                </li>
+              ))}
+            </ul>
+          )}
           {approvals === null ? (
             <p className="muted">
               Start the guardian service with <code>npm run guardian</code> to receive requests from your agent.
