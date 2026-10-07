@@ -194,12 +194,21 @@ async function main() {
 
   let answer: string | undefined;
   let failure: unknown;
+  let textOnlyTurns = 0;
   try {
     for (let step = 1; step <= MAX_STEPS && answer === undefined; step++) {
       const turn = await chat.next();
       if (turn.text.trim()) log(`${bold("agent:")} ${turn.text.trim()}`);
       if (turn.calls.length === 0) {
-        chat.say("Continue: use a tool, or call finish when done.");
+        // A reply with no tool call is usually the model's final answer given
+        // as text. Nudge once; the second time, take the text as the answer
+        // instead of looping (seen on testnet: repeated text burned the
+        // provider's token-per-minute budget).
+        if (++textOnlyTurns >= 2 && turn.text.trim()) {
+          answer = turn.text.trim();
+          break;
+        }
+        chat.say("Call finish with your answer, or use another tool.");
         continue;
       }
       const results = [];
