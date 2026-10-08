@@ -58,7 +58,19 @@ export function PolicyComposer(props: {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: request }),
       });
-      const body = await r.json();
+      const raw = await r.text();
+      let body: any;
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        // Express answers an unknown route with an HTML page: an agent service
+        // started before this feature existed.
+        throw new Error(
+          r.status === 404
+            ? "The running agent service is an older version. Stop it (Ctrl+C) and start it again: npm run agent:chat:server"
+            : `Unexpected answer from the agent service (HTTP ${r.status})`,
+        );
+      }
       if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
       setDraft(body.draft);
       setAgentKey(body.agentKey);
