@@ -417,7 +417,7 @@ export function ReceiptCard({ data, onClose }: { data: SignedReceipt | TaskRecei
         </button>
       </div>
       <p className="muted small">
-        Check it against the chain: <code>npm run receipt:verify -- &lt;file&gt;</code>
+        Check it against the chain: <code>npm run receipt:verify</code> (checks the newest download)
       </p>
     </div>
   );
