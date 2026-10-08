@@ -18,6 +18,17 @@ No dependencies: one file, `server.mjs`, Node 20 or newer.
 
 ## Run it on a VPS (Ubuntu or Debian)
 
+**Quick way: one command.** Log in to the server, then:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/phoenix-2203/acan/master/apps/relay/deploy/install.sh -o install.sh
+sudo bash install.sh YOUR-NAME.duckdns.org
+```
+
+It does steps 1 to 6 below, asks for the Groq key once (hidden while you paste),
+and checks HTTPS at the end. The steps below are the same thing done by hand.
+
+
 You need a DuckDNS name pointing at the server's public IP (e.g. `acan-ai.duckdns.org`)
 and ports 80 and 443 open. Run these on the server.
 
