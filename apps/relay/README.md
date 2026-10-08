@@ -118,3 +118,16 @@ demo site's sandbox shows the AI chat from then on.
 | `ALLOWED_ORIGINS` | `https://phoenix-2203.github.io` + localhost | Sites allowed to call the relay |
 | `HOST`, `PORT` | `127.0.0.1`, `8787` | Where it listens (behind Caddy) |
 | `TRUST_PROXY` | `1` in the service | Read the visitor's IP from Caddy's `X-Forwarded-For` |
+
+## Also serve the demo site from this server
+
+After the relay is installed, a second DuckDNS name (pointing at the same IP) can
+serve the demo site:
+
+```sh
+sudo bash /opt/acan/apps/relay/deploy/install-site.sh acan-demo.duckdns.org
+```
+
+The site's files come from the `site-dist` branch, which the "Demo site" workflow
+rebuilds on every push; the server checks for a new build every 5 minutes. The script
+also adds the new address to the relay's `ALLOWED_ORIGINS`. GitHub Pages keeps working.

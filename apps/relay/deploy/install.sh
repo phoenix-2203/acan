@@ -86,7 +86,9 @@ if ! command -v caddy >/dev/null; then
   apt-get update -y
   apt-get install -y caddy
 fi
-sed "s/acan-ai\.duckdns\.org/$DOMAIN/" /opt/acan/apps/relay/deploy/Caddyfile >/etc/caddy/Caddyfile
+# One file per ACAN site, all imported by the main Caddyfile (install-site.sh adds the demo site).
+sed "s/acan-ai\.duckdns\.org/$DOMAIN/" /opt/acan/apps/relay/deploy/Caddyfile >/etc/caddy/acan-relay.caddy
+echo "import /etc/caddy/acan-*.caddy" >/etc/caddy/Caddyfile
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
   ufw allow 80,443/tcp
 fi
