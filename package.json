@@ -24,6 +24,8 @@
     "agent:private": "tsx apps/agent/src/agent-private.ts",
     "agent:ai": "tsx apps/agent/src/agent-ai.ts",
     "mcp": "tsx apps/mcp/src/server.ts",
+    "agent:chat": "tsx apps/agent/src/chat-cli.ts",
+    "agent:chat:server": "tsx apps/agent/src/chat-server.ts",
     "agent:settle": "tsx apps/agent/src/settle-tabs.ts",
     "agent:return": "tsx apps/agent/src/return-vault.ts",
     "ct:setup": "tsx scripts/ct-setup.ts",
