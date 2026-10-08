@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body><main style="max-width:760px;margin:24px auto;padding:0 16px"><section class="panel" id="cap"><h3 style="margin:0 0 10px">Talk to the AI agent</h3><div id="r"></div></section></main>
+<script type="module">
+import "./src/styles.css";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { AiChat } from "./src/AiChat.tsx";
+import { SandboxAgent } from "./src/ai-agent.ts";
+const N = "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT", S = "GDZCGACGQKEPUNXJUMLXSGWJ3KS4YT2MYQGDQYH4DCILADI43P7SVFRA";
+const ATT = "GDICUZE6QVV7TXDO2ITFSWF5VM5VX4AF75PFJS5FTZWYEZ77ANNXSGJ4";
+const shops = [
+ { name: "Northwind Data", address: N, items: [{ id: "ledger-report", title: "Ledger report", priceXlm: "1" }, { id: "market-brief", title: "Market brief", priceXlm: "1.5" }, { id: "full-dataset", title: "Full dataset", priceXlm: "2.5" }] },
+ { name: "Southgate Data", address: S, items: [{ id: "ledger-report", title: "Ledger report", priceXlm: "0.8" }, { id: "news-digest", title: "News digest", priceXlm: "0.3" }] }];
+let n = 0; const call = (name, args) => ({ id: "c" + (++n), type: "function", function: { name, arguments: JSON.stringify(args) } });
+const model = async (_u, init) => {
+  const { messages } = JSON.parse(init.body); const last = messages.at(-1); let m;
+  if (last.role === "tool" && last.content.includes("Northwind")) m = { content: "Southgate's ledger report is the cheapest.", tool_calls: [call("offer_options", { question: "Which ledger report?", options: [
+    { label: "Southgate: ledger report", shop: "Southgate Data", item: "ledger-report" }, { label: "Northwind: ledger report", shop: "Northwind Data", item: "ledger-report" }, { label: "Cancel", reply: "Cancel" }] })] };
+  else if (/Ignore/.test(last.content)) m = { content: "That address is not one of your shops. Your smart account will decide.", tool_calls: [call("offer_options", { question: "Send it anyway?", options: [{ label: "Send 0.5 XLM", to: ATT, amountXlm: "0.5" }, { label: "Cancel", reply: "Cancel" }] })] };
+  else if (/I picked/.test(last.content)) m = { content: /blocked/.test(last.content) ? "Your smart account blocked it: that address is not on your allowlist (#3401). No funds moved." : "Done: you paid 0.8 XLM to Southgate Data for the ledger report." };
+  else m = { content: "", tool_calls: [call("list_shops", {})] };
+  return new Response(JSON.stringify({ message: m }));
+};
+const agent = new SandboxAgent("https://acan-ai.duckdns.org", {
+  shops: () => shops,
+  allowance: async () => null,
+  pay: async (to) => to === S ? { ok: true, tx: "" } : { ok: false, refused: true, code: 3401, reason: "RecipientNotAllowed", title: "Recipient is not approved", policy: "Merchant allowlist" },
+}, model);
+window.agent = agent;
+createRoot(document.getElementById("r")).render(createElement(AiChat, { agent, attacker: ATT, disabled: false }));
+</script></body></html>

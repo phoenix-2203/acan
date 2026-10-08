@@ -1,0 +1,30 @@
+{
+  "agentName": "Research agent",
+  "budgetUsdc": "0.20",
+  "periodHours": 24,
+  "expiresInHours": 168,
+  "merchants": [
+    {
+      "url": "http://localhost:4021",
+      "name": "Northwind Data",
+      "address": "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT",
+      "capUsdc": "0.05"
+    },
+    {
+      "url": "http://localhost:4022",
+      "name": "Southgate Data",
+      "address": "GDZCGACGQKEPUNXJUMLXSGWJ3KS4YT2MYQGDQYH4DCILADI43P7SVFRA",
+      "capUsdc": "0.02"
+    }
+  ],
+  "maxPerPaymentUsdc": "0.05",
+  "maxPayments": 0,
+  "privateMode": false,
+  "summary": "0.20 USDC a day for 7 days at Northwind and Southgate, at most 0.05 USDC per payment.",
+  "tiers": {
+    "auto": "Pays on its own: up to 0.05 USDC per payment, to Northwind Data and Southgate Data, within 0.20 USDC per day and each merchant's cap.",
+    "ask": "Asks you (passkey): anything over 0.05 USDC in one payment, a merchant's cap, the 0.20 USDC budget.",
+    "block": "Refused on-chain: any address not listed, and everything after 168 h, or after you revoke it."
+  },
+  "notes": []
+}

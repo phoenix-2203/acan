@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ACAN film</title>
+<link rel="stylesheet" href="./fonts.css">
+<style>
+/* ACAN's own dark theme (apps/site, apps/web), deepened for the screen. */
+:root {
+  --void: #0b0b0a;
+  --bg: #121210;
+  --surface: #1b1b18;
+  --ink: #f0ede5;
+  --muted: #9c978b;
+  --line: #2f2e29;
+  --accent: #7c9dff;
+  --ok: #6fcf97;
+  --ok-bg: #16281e;
+  --danger: #ff8a75;
+  --danger-bg: #2c1915;
+  --sans: "Instrument Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--void); }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--void); color: var(--ink); font-family: var(--sans); }
+.layer { position: absolute; inset: 0; }
+.abs { position: absolute; }
+.shot { position: absolute; border-radius: 18px; overflow: hidden; box-shadow: 0 40px 120px -40px rgba(0,0,0,.9), 0 0 0 1px var(--line); }
+.shot img { display: block; width: 100%; }
+.big { font-weight: 700; letter-spacing: -0.035em; line-height: 0.98; }
+.eyebrow { font: 500 20px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); }
+.node { position: absolute; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1.5px solid var(--line); border-radius: 16px; background: var(--surface);
+  font: 600 28px/1.15 var(--sans); letter-spacing: -0.01em; padding: 0 24px; }
+.node small { display: block; font: 500 17px/1.3 var(--mono); color: var(--muted); letter-spacing: .02em; margin-top: 6px; }
+.arrow { position: absolute; height: 2px; background: var(--muted); transform-origin: left center; }
+.arrow::after { content: ""; position: absolute; right: -2px; top: -6px; border: 7px solid transparent; border-left: 11px solid var(--muted); border-right: 0; }
+.check { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 14px; font: 500 30px/1.2 var(--sans); }
+.mark { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 700 20px/1 var(--sans); background: var(--surface); color: var(--muted); border: 1.5px solid var(--line); }
+.mark.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.mark.no { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
+.verdict { font: 700 60px/1 var(--sans); letter-spacing: -0.02em; }
+.panel { position: absolute; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 30px 34px; }
+.term { font: 400 22px/1.65 var(--mono); white-space: pre; color: var(--ink); }
+.term .k { color: var(--muted); }
+.term .g { color: var(--ok); }
+.q { display: grid; grid-template-columns: 210px 1fr; gap: 20px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.q b { font: 500 22px/1 var(--mono); letter-spacing: .14em; color: var(--accent); }
+.q span { font: 500 29px/1.3 var(--sans); }
+.q em { font-style: normal; color: var(--muted); }
+.tile { position: absolute; top: 260px; width: 520px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 40px 38px; display: grid; align-content: start; gap: 18px; }
+.tile h3 { margin: 0; font: 700 40px/1.1 var(--sans); letter-spacing: -0.02em; }
+.tile p { margin: 0; font: 400 25px/1.45 var(--sans); color: var(--muted); }
+.tile .stat { font: 600 26px/1.5 var(--mono); color: var(--ink); }
+.vision { font: 700 20px/1 var(--mono); letter-spacing: .2em; color: var(--accent); border: 1.5px solid var(--accent); border-radius: 8px; padding: 10px 14px; }
+.dot { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 6px rgba(124,157,255,.18); }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- 1 · Cold open -->
+  <div class="layer" id="s1">
+    <div class="shot" id="s1shot" style="left:596px; top:250px; width:728px; height:470px; transform-origin:50% 40%;">
+      <img id="s1img" src="../captures/dash-chat-blocked.png" alt="">
+    </div>
+    <div class="abs eyebrow" id="s1tag" style="left:0; right:0; text-align:center; top:930px;">ACAN dashboard · Stellar testnet</div>
+    <div class="abs big" id="s1yes" style="left:0; right:0; top:340px; text-align:center; font-size:150px;">THE AI SAID YES.</div>
+    <div class="abs big" id="s1no" style="left:0; right:0; top:540px; text-align:center; font-size:150px; color:var(--danger);">THE WALLET SAID NO.</div>
+  </div>
+
+  <!-- 2 · The problem -->
+  <div class="layer" id="s2">
+    <div class="abs eyebrow" id="s2eye" style="left:160px; top:150px;">The problem</div>
+    <div class="abs big" id="s2head" style="left:160px; top:200px; font-size:76px; width:1500px;">Agents can act. Should they hold your money?</div>
+    <div class="node" id="n1" style="left:160px; top:470px; width:400px; height:150px;">AI agent<small>calls tools · uses APIs · pays</small></div>
+    <div class="arrow" id="a1" style="left:580px; top:545px; width:180px;"></div>
+    <div class="node" id="n2a" style="left:780px; top:470px; width:400px; height:150px;">Unrestricted wallet<small>holds the keys</small></div>
+    <div class="node" id="n2b" style="left:780px; top:470px; width:400px; height:150px; border-color:var(--accent); color:var(--accent);">Authorization<small>bounded by policy</small></div>
+    <div class="arrow" id="a2" style="left:1200px; top:545px; width:180px;"></div>
+    <div class="node" id="n3a" style="left:1400px; top:470px; width:360px; height:150px; font-size:64px;">?</div>
+    <div class="node" id="n3b" style="left:1400px; top:470px; width:360px; height:150px; border-color:var(--ok); color:var(--ok);">Controlled payment<small>or refused</small></div>
+    <div class="abs" id="s2note" style="left:160px; top:700px; width:1600px; font:400 28px/1.5 var(--sans); color:var(--muted);">
+      May 2026: an instruction hidden in Morse code led an AI agent with wallet access to send roughly $150,000–200,000. No key was stolen. The agent simply had the authority.
+      <div class="mono" style="font-size:18px; margin-top:10px; letter-spacing:.04em;">Source: OECD AI incident record 2026-05-04 · cited on the ACAN demo site</div>
+    </div>
+    <div class="abs big" id="s2q" style="left:160px; top:860px; font-size:58px; width:1600px; color:var(--ink);">What is the agent <span style="color:var(--accent)">authorized</span> to pay for?</div>
+  </div>
+
+  <!-- 3 · ACAN -->
+  <div class="layer" id="s3">
+    <div class="shot" id="s3hero" style="left:240px; top:110px; width:1440px; height:900px;"><img src="../captures/site-hero.png" alt=""></div>
+    <div class="shot" id="s3steps" style="left:960px; top:250px; width:820px; height:499px;"><img src="../captures/site-steps.png" alt=""></div>
+    <div class="abs" id="s3copy" style="left:140px; top:300px; width:720px;">
+      <div class="big" style="font-size:120px; letter-spacing:.06em; font-family:var(--mono); font-weight:500;">ACAN</div>
+      <div style="font:600 46px/1.15 var(--sans); letter-spacing:-0.02em; margin-top:26px;">An authorization layer for AI-agent payments on Stellar.</div>
+      <div style="font:400 28px/1.5 var(--sans); color:var(--muted); margin-top:26px;">Your money stays in an OpenZeppelin smart account you control with a passkey. The agent gets its own key and one rule.</div>
+    </div>
+  </div>
+
+  <!-- 4 · How authority works -->
+  <div class="layer" id="s4">
+    <div class="shot" id="s4card" style="left:100px; top:70px; width:820px; height:871px;"><img src="../captures/dash-composer.png" alt=""></div>
+    <div class="abs eyebrow" id="s4tag" style="left:100px; top:975px;">The AI drafts it. Only the passkey creates it.</div>
+    <div class="abs" id="s4qs" style="left:1000px; top:130px; width:840px;">
+      <div class="q" id="q1"><b>WHO</b><span>Agent key GB6V5…IFMZ <em>under rule #12</em></span></div>
+      <div class="q" id="q2"><b>WHAT</b><span>USDC <em>only</em></span></div>
+      <div class="q" id="q3"><b>HOW MUCH</b><span>0.20 a day, rolling <em>· at most 0.05 at once</em></span></div>
+      <div class="q" id="q4"><b>WHERE</b><span>Northwind ≤ 0.05 · Southgate ≤ 0.02 <em>per day</em></span></div>
+      <div class="q" id="q5"><b>WHEN</b><span>Ends after 7 days <em>· revocable any time</em></span></div>
+      <div id="q6" style="margin-top:34px; font:500 25px/1.45 var(--sans); color:var(--muted);">Checked on every payment by Soroban policy contracts on the smart account. Not by the AI.</div>
+    </div>
+    <div class="panel" id="s4status" style="left:1000px; top:640px; width:840px;">
+      <div class="term"><span class="k">$ npm run status          read from testnet, 8 Oct 2026</span>
+Agent rule id              12
+Allowance per period       0.2 USDC / 17280 ledgers
+  may pay merchant A       0 / 0.05 USDC used
+  may pay merchant B       0 / 0.02 USDC used
+  largest single payment   0.05 USDC</div>
+    </div>
+  </div>
+
+  <!-- 5 · The proof -->
+  <div class="layer" id="s5">
+    <div class="shot" id="s5paid" style="left:120px; top:150px; width:760px; height:572px;"><img src="../captures/site-chat-paid.png" alt=""></div>
+    <div class="shot" id="s5blk" style="left:120px; top:150px; width:760px; height:579px;"><img src="../captures/site-chat-blocked.png" alt=""></div>
+    <div class="abs eyebrow" id="s5tag" style="left:120px; top:770px;">ACAN demo site · Stellar testnet</div>
+    <div class="abs" id="s5list" style="left:990px; top:170px; width:820px; display:grid; gap:24px;">
+      <div class="check" id="c1"><div class="mark" id="m1"></div><div>Agent key signs under its rule</div></div>
+      <div class="check" id="c2"><div class="mark" id="m2"></div><div>Rule is live: not expired, not revoked</div></div>
+      <div class="check" id="c3"><div class="mark" id="m3"></div><div id="c3t">Shop is on the allowlist</div></div>
+      <div class="check" id="c4"><div class="mark" id="m4"></div><div>Within the shop's own cap</div></div>
+      <div class="check" id="c5"><div class="mark" id="m5"></div><div>Within the per-payment limit</div></div>
+      <div class="check" id="c6"><div class="mark" id="m6"></div><div>Within today's allowance</div></div>
+    </div>
+    <div class="abs verdict" id="s5ok" style="left:990px; top:780px; color:var(--ok);">PAYMENT APPROVED</div>
+    <div class="abs mono" id="s5oksub" style="left:990px; top:860px; font-size:22px; color:var(--muted);">0.8 XLM to Southgate Data · settled on testnet</div>
+    <div class="abs verdict" id="s5no" style="left:990px; top:780px; color:var(--danger);">PAYMENT DENIED</div>
+    <div class="abs mono" id="s5nosub" style="left:990px; top:860px; font-size:22px; color:var(--muted);">RecipientNotAllowed · #3401 · no funds moved</div>
+    <div class="abs big" id="s5yes" style="left:0; right:0; top:360px; text-align:center; font-size:140px;">THE AI SAID YES.</div>
+    <div class="abs big" id="s5acan" style="left:0; right:0; top:550px; text-align:center; font-size:140px; color:var(--danger);">ACAN SAID NO.</div>
+  </div>
+
+  <!-- 6 · Stellar and x402 -->
+  <div class="layer" id="s6">
+    <div class="abs eyebrow" id="s6eye" style="left:120px; top:120px;">Under the hood · x402 on Stellar</div>
+    <div class="node" id="f1" style="left:120px; top:300px; width:300px; height:140px;">AI agent<small>own ed25519 key</small></div>
+    <div class="arrow" id="fa1" style="left:430px; top:370px; width:120px;"></div>
+    <div class="node" id="f2" style="left:560px; top:300px; width:340px; height:140px;">Merchant<small>HTTP 402 · x402 v2</small></div>
+    <div class="arrow" id="fa2" style="left:910px; top:370px; width:120px;"></div>
+    <div class="node" id="f3" style="left:1040px; top:300px; width:340px; height:140px;">Signs under rule #12<small>auth entry, not a key</small></div>
+    <div class="arrow" id="fa3" style="left:1390px; top:370px; width:120px;"></div>
+    <div class="node" id="f4" style="left:1520px; top:300px; width:300px; height:140px; border-color:var(--accent);">Smart account<small>__check_auth</small></div>
+    <div class="arrow" id="fa4" style="left:1670px; top:450px; width:150px; transform:rotate(90deg);"></div>
+    <div class="node" id="f5" style="left:1180px; top:620px; width:640px; height:150px; border-color:var(--accent); color:var(--accent);">Soroban policies<small>spending limit · merchant budget (allowlist, caps, per-payment)</small></div>
+    <div class="arrow" id="fa5" style="left:1170px; top:695px; width:150px; transform:rotate(180deg); transform-origin:left center;"></div>
+    <div class="node" id="f6" style="left:560px; top:620px; width:440px; height:150px; border-color:var(--ok); color:var(--ok);">USDC transfer<small>smart account → merchant</small></div>
+    <div class="arrow" id="fa6" style="left:550px; top:695px; width:120px; transform:rotate(180deg); transform-origin:left center;"></div>
+    <div class="node" id="f7" style="left:120px; top:620px; width:300px; height:150px;">Data delivered<small>only after settlement</small></div>
+    <div class="abs mono" id="s6foot" style="left:120px; top:880px; font-size:23px; color:var(--muted);">Verified: 0.01 USDC to Northwind Data · tx 4394246d… · Stellar testnet</div>
+  </div>
+
+  <!-- 7 · More than a spending limit -->
+  <div class="layer" id="s7">
+    <div class="abs eyebrow" id="s7eye" style="left:120px; top:140px;">More than a spending limit</div>
+    <div class="tile" id="t1" style="left:120px;">
+      <h3>Private payments</h3>
+      <p>Signed vouchers per request, settled in confidential transfers. Amounts are hidden on-chain; only the merchant and your auditor key can read them.</p>
+      <div class="stat">7 paid requests<br>0 per-request transactions<br>3 confidential settlements</div>
+      <p style="font-size:20px">Audit matched the merchant's ledger · testnet</p>
+    </div>
+    <div class="tile" id="t2" style="left:700px;">
+      <h3>Signed receipts</h3>
+      <p>The agent signs what it spent. Anyone can check it against the chain.</p>
+      <div class="term" style="font-size:18px; line-height:1.7; white-space:pre-wrap;"><span class="g">OK</span>  signed by the agent key GB6V5…IFMZ
+<span class="g">OK</span>  total spent 0.01 USDC matches
+<span class="g">OK</span>  4394246d… 0.01 USDC to Northwind
+receipt verified</div>
+    </div>
+    <div class="tile" id="t3" style="left:1280px;">
+      <h3>Any agent, via MCP</h3>
+      <p>MCP clients use the same guarded wallet, with the same on-chain limits.</p>
+      <div class="stat" style="font-size:21px">acan_list_merchants<br>acan_check_budget<br>acan_buy<br>acan_request_approval<br>acan_settle_tabs</div>
+    </div>
+  </div>
+
+  <!-- 8 · Vision -->
+  <div class="layer" id="s8">
+    <div class="abs" id="s8tag" style="left:120px; top:180px;"><span class="vision">VISION · NOT BUILT YET</span></div>
+    <div class="abs big" id="s8head" style="left:120px; top:260px; font-size:64px; width:1600px;">Authority that agents pass on, narrower at every step.</div>
+    <div class="node" id="v1" style="left:120px; top:560px; width:380px; height:170px;">You<small>passkey</small></div>
+    <div class="node" id="v2" style="left:580px; top:575px; width:360px; height:140px;">Agent<small>its rule</small></div>
+    <div class="node" id="v3" style="left:1020px; top:590px; width:340px; height:110px;">Sub-agent<small>a narrower rule</small></div>
+    <div class="node" id="v4" style="left:1440px; top:605px; width:320px; height:80px; font-size:24px;">Service</div>
+  </div>
+
+  <!-- 9 · Close -->
+  <div class="layer" id="s9">
+    <div class="abs big" id="z1" style="left:160px; top:330px; font-size:84px; width:1600px;">AI agents are becoming economic actors.</div>
+    <div class="abs big" id="z2" style="left:160px; top:450px; font-size:84px; width:1600px; color:var(--muted);">They need more than wallets.</div>
+    <div class="abs" id="z3" style="left:160px; top:250px; font:500 96px/1 var(--mono); letter-spacing:.12em;">ACAN</div>
+    <div class="abs big" id="z4" style="left:160px; top:420px; font-size:72px; width:1600px;">AI agents don't get your money.</div>
+    <div class="abs big" id="z5" style="left:160px; top:510px; font-size:72px; width:1600px; color:var(--accent);">They get temporary, verifiable spending authority.</div>
+    <div class="abs" id="z6" style="left:160px; top:700px; font:600 34px/1.2 var(--sans);">The AI said yes. <span style="color:var(--danger)">The wallet said no.</span></div>
+    <div class="abs mono" id="z7" style="left:160px; top:860px; font-size:24px; color:var(--muted);">acan-demo.duckdns.org  ·  github.com/phoenix-2203/acan  ·  Stellar testnet</div>
+  </div>
+
+</div>
+<script>
+// Deterministic timeline: seek(t) sets every element from t alone.
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const out = (x) => 1 - Math.pow(1 - x, 3);
+/** Piecewise value over keyframes [[t, v], ...] with easing. */
+function k(t, frames, fn = ease) {
+  if (t <= frames[0][0]) return frames[0][1];
+  for (let i = 1; i < frames.length; i++) {
+    const [t1, v1] = frames[i], [t0, v0] = frames[i - 1];
+    if (t <= t1) return v0 + (v1 - v0) * fn((t - t0) / (t1 - t0 || 1));
+  }
+  return frames[frames.length - 1][1];
+}
+/** Fade in at a, out at b (seconds of fade d). */
+const vis = (t, a, b, d = 0.5) => clamp((t - a) / d) * clamp((b - t) / d);
+function set(id, s) { const el = $(id); for (const key in s) el.style[key] = s[key]; }
+function show(id, o, y = 0, extra = "") { set(id, { opacity: o, transform: `translateY(${y}px) ${extra}`, visibility: o <= 0.001 ? "hidden" : "visible" }); }
+function layer(id, t, a, b) { const o = vis(t, a, b, 0.6); set(id, { opacity: o, visibility: o <= 0.001 ? "hidden" : "visible" }); return o; }
+
+const S = { s1: [0, 12.2], s2: [12, 35.2], s3: [35, 51.2], s4: [51, 74.2], s5: [74, 108.2], s6: [108, 129.2], s7: [129, 144.2], s8: [144, 151.2], s9: [151, 170.5] };
+
+function seek(t) {
+  // 1 · Cold open
+  if (layer("s1", t, ...S.s1) > 0) {
+    // Capture shown at half size (728×700); the window starts at the user's message and grows as the chat does.
+    const top = 178;
+    const reveal = k(t, [[0.4, 385], [3.8, 385], [4.3, 432], [5.6, 432], [6.3, 620]]);
+    set("s1img", { transform: `translateY(${-top}px)` });
+    const h = reveal - top;
+    set("s1shot", { height: `${h}px`, top: `${540 - h * 0.75}px`, transform: `scale(${k(t, [[0, 1.62], [6.6, 1.42]])})`, transformOrigin: "50% 50%",
+      opacity: k(t, [[0.3, 0], [1.2, 1], [7.0, 1], [7.6, 0.16]]), filter: `blur(${k(t, [[7, 0], [7.6, 6]])}px)` });
+    show("s1tag", k(t, [[1.2, 0], [2, 1], [6.8, 1], [7.4, 0]]));
+    show("s1yes", vis(t, 7.4, 11.6), k(t, [[7.4, 20], [8, 0]], out));
+    show("s1no", vis(t, 8.5, 11.6), k(t, [[8.5, 20], [9.1, 0]], out));
+  }
+  // 2 · Problem
+  if (layer("s2", t, ...S.s2) > 0) {
+    show("s2eye", vis(t, 12.4, 34.8)); show("s2head", vis(t, 12.6, 34.8), k(t, [[12.6, 16], [13.4, 0]], out));
+    show("n1", vis(t, 13.6, 34.8), k(t, [[13.6, 14], [14.2, 0]], out));
+    set("a1", { opacity: vis(t, 14.6, 34.8), transform: `scaleX(${k(t, [[14.6, 0], [15.2, 1]])})` });
+    show("n2a", vis(t, 15.4, 25.2));
+    show("n2b", vis(t, 25.0, 34.8), 0, `scale(${k(t, [[25, 0.94], [25.8, 1]], out)})`);
+    set("a2", { opacity: vis(t, 16.2, 34.8), transform: `scaleX(${k(t, [[16.2, 0], [16.8, 1]])})` });
+    show("n3a", vis(t, 17, 25.6));
+    show("n3b", vis(t, 25.6, 34.8), 0, `scale(${k(t, [[25.6, 0.94], [26.4, 1]], out)})`);
+    show("s2note", vis(t, 18.6, 24.6));
+    show("s2q", vis(t, 27.6, 34.8), k(t, [[27.6, 14], [28.4, 0]], out));
+  }
+  // 3 · ACAN
+  if (layer("s3", t, ...S.s3) > 0) {
+    set("s3hero", { opacity: k(t, [[35, 0], [35.8, 1], [41.2, 1], [42, 0]]), transform: `scale(${k(t, [[35, 1.08], [42, 1.0]])})` });
+    show("s3copy", vis(t, 42.2, 50.8), k(t, [[42.2, 16], [43, 0]], out));
+    set("s3steps", { opacity: vis(t, 43.2, 50.8), transform: `translateX(${k(t, [[43.2, 40], [44.2, 0]], out)}px) scale(${k(t, [[43.2, 1.0], [50.8, 1.05]])})` });
+  }
+  // 4 · Authority
+  if (layer("s4", t, ...S.s4) > 0) {
+    set("s4card", { opacity: vis(t, 51.2, 73.8), transform: `translateY(${k(t, [[51.2, 30], [52.2, 0]], out)}px) scale(${k(t, [[52, 1], [73.8, 1.04]])})` });
+    show("s4tag", vis(t, 53.2, 73.8));
+    const qs = [57.2, 58.6, 60.0, 61.6, 63.2];
+    qs.forEach((a, i) => show(`q${i + 1}`, vis(t, a, 73.8), k(t, [[a, 12], [a + 0.6, 0]], out)));
+    show("q6", vis(t, 64.8, 67.6));
+    show("s4status", vis(t, 67.6, 73.8), k(t, [[67.6, 20], [68.4, 0]], out));
+  }
+  // 5 · Proof
+  if (layer("s5", t, ...S.s5) > 0) {
+    const paid = vis(t, 74.4, 85.4), blk = vis(t, 85.6, 100.4);
+    set("s5paid", { opacity: paid, transform: `scale(${k(t, [[74.4, 1.03], [85.4, 1.0]])})` });
+    set("s5blk", { opacity: blk, transform: `scale(${k(t, [[85.6, 1.0], [99, 1.06]])})`, filter: `brightness(${k(t, [[85.6, 1], [90, 0.92]])})` });
+    show("s5tag", vis(t, 74.6, 100.4));
+    // Checklist: approved run 76.4-85.4; denied run 87.5-100.4.
+    const approved = t < 85.5;
+    $("c3t").textContent = "Shop is on the allowlist";
+    for (let i = 1; i <= 6; i++) {
+      const a1 = 76.4 + (i - 1) * 0.55;
+      let o, cls = "", txt = "", dim = 1;
+      if (approved) { o = vis(t, 76.0, 85.4); if (t >= a1) { cls = "ok"; txt = "✓"; } }
+      else {
+        o = vis(t, 87.2, 100.4);
+        const a2 = 88.6 + (i - 1) * 0.9;
+        if (i <= 2 && t >= a2) { cls = "ok"; txt = "✓"; }
+        if (i === 3 && t >= 91.8) { cls = "no"; txt = "✕"; }
+        if (i > 3) dim = t >= 91.8 ? 0.28 : 1;
+      }
+      show(`c${i}`, o * dim);
+      const m = $(`m${i}`); m.className = `mark ${cls}`; m.textContent = txt;
+    }
+    show("s5ok", vis(t, 80.2, 85.4), k(t, [[80.2, 14], [80.8, 0]], out));
+    show("s5oksub", vis(t, 80.8, 85.4));
+    show("s5no", vis(t, 92.6, 100.4), k(t, [[92.6, 14], [93.2, 0]], out));
+    show("s5nosub", vis(t, 93.2, 100.4));
+    show("s5yes", vis(t, 102.6, 107.8), k(t, [[102.6, 20], [103.2, 0]], out));
+    show("s5acan", vis(t, 103.8, 107.8), k(t, [[103.8, 20], [104.4, 0]], out));
+  }
+  // 6 · Stellar flow
+  if (layer("s6", t, ...S.s6) > 0) {
+    show("s6eye", vis(t, 108.4, 128.8));
+    const steps = [["f1", 109.2], ["fa1", 110.4], ["f2", 110.8], ["fa2", 113.4], ["f3", 113.8], ["fa3", 116.2], ["f4", 116.6], ["fa4", 118.4], ["f5", 118.8], ["fa5", 121.4], ["f6", 121.8], ["fa6", 124.4], ["f7", 124.8]];
+    for (const [id, a] of steps) {
+      if (id.startsWith("fa")) {
+        const base = $(id).dataset.base ?? ($(id).dataset.base = $(id).style.transform || "");
+        set(id, { opacity: vis(t, a, 128.8), transform: `${base} scaleX(${k(t, [[a, 0], [a + 0.5, 1]])})` });
+      } else show(id, vis(t, a, 128.8), k(t, [[a, 12], [a + 0.6, 0]], out));
+    }
+    show("s6foot", vis(t, 125.6, 128.8));
+  }
+  // 7 · Tiles
+  if (layer("s7", t, ...S.s7) > 0) {
+    show("s7eye", vis(t, 129.4, 143.8));
+    show("t1", vis(t, 129.8, 143.8), k(t, [[129.8, 24], [130.6, 0]], out));
+    show("t2", vis(t, 134.6, 143.8), k(t, [[134.6, 24], [135.4, 0]], out));
+    show("t3", vis(t, 138.6, 143.8), k(t, [[138.6, 24], [139.4, 0]], out));
+  }
+  // 8 · Vision
+  if (layer("s8", t, ...S.s8) > 0) {
+    show("s8tag", vis(t, 144.4, 150.8)); show("s8head", vis(t, 144.6, 150.8), k(t, [[144.6, 14], [145.4, 0]], out));
+    ["v1", "v2", "v3", "v4"].forEach((id, i) => show(id, vis(t, 145.6 + i * 0.9, 150.8), k(t, [[145.6 + i * 0.9, 12], [146.2 + i * 0.9, 0]], out)));
+  }
+  // 9 · Close
+  if (layer("s9", t, ...S.s9) > 0) {
+    show("z1", vis(t, 151.6, 157.0), k(t, [[151.6, 14], [152.4, 0]], out));
+    show("z2", vis(t, 154.4, 157.0), k(t, [[154.4, 14], [155.2, 0]], out));
+    show("z3", vis(t, 157.4, 170.6));
+    show("z4", vis(t, 158.6, 170.6), k(t, [[158.6, 14], [159.4, 0]], out));
+    show("z5", vis(t, 160.6, 170.6), k(t, [[160.6, 14], [161.4, 0]], out));
+    show("z6", vis(t, 164.4, 170.6));
+    show("z7", vis(t, 165.6, 170.6));
+  }
+  // Fade to black at the very end.
+  $("stage").style.filter = `brightness(${k(t, [[169.2, 1], [170, 0]])})`;
+}
+window.seek = seek;
+window.DURATION = 170;
+seek(Number(new URLSearchParams(location.search).get("t") ?? 0));
+</script>
+</body>
+</html>

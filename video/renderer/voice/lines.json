@@ -1,0 +1,80 @@
+[
+ {
+  "id": "s1a",
+  "scene": 1,
+  "at": 1.6,
+  "text": "An AI agent is told to send money to a stranger. It agrees."
+ },
+ {
+  "id": "s1b",
+  "scene": 1,
+  "at": 7.4,
+  "text": "The AI said yes. The wallet said no."
+ },
+ {
+  "id": "s2",
+  "scene": 2,
+  "at": 12.5,
+  "text": "Agents can now call tools, use APIs, and pay for things on their own. In May twenty twenty-six, one decoded an instruction hidden in Morse code, and sent away roughly a hundred and fifty to two hundred thousand dollars. No key was stolen. It simply had the authority. So the question isn't whether an agent can pay. It's what it's authorized to pay for."
+ },
+ {
+  "id": "s3",
+  "scene": 3,
+  "at": 35.5,
+  "text": "A-can is an authorization layer for agent payments on Stellar. Your money stays in an OpenZeppelin smart account that you control with a passkey. The agent gets its own key, and one rule. Not your money. Bounded authority."
+ },
+ {
+  "id": "s4",
+  "scene": 4,
+  "at": 52.0,
+  "text": "You describe the allowance in plain words. The AI drafts it, but it can't grant it. Only your passkey can. From then on, every payment is checked on-chain: which agent is signing, which token, how much today, how much at once, which merchant, and whether the rule has expired. These are Soroban policy contracts, not prompts."
+ },
+ {
+  "id": "s5a",
+  "scene": 5,
+  "at": 75.0,
+  "text": "Here's an allowed payment. The agent compares prices, I pick, and every check passes. Settled on testnet."
+ },
+ {
+  "id": "s5b",
+  "scene": 5,
+  "at": 86.0,
+  "text": "Now the attack. An instruction tells the agent to pay an address that isn't on the list. The AI goes along with it. The smart account refuses. Recipient not approved, error thirty-four oh one. No funds moved."
+ },
+ {
+  "id": "s5c",
+  "scene": 5,
+  "at": 103.0,
+  "text": "The AI said yes. A-can said no."
+ },
+ {
+  "id": "s6",
+  "scene": 6,
+  "at": 108.8,
+  "text": "Under the hood, the agent pays merchants over x four oh two, the open standard for paying over HTTP. It signs under its rule, the smart account runs every policy in its own authorization check, and U S D C moves straight to the merchant. The merchant delivers only after settlement."
+ },
+ {
+  "id": "s7",
+  "scene": 7,
+  "at": 129.6,
+  "text": "In private mode, amounts are hidden on-chain. Only the merchant and you can read them. Every task ends with a receipt the agent signs, that anyone can check. And any MCP client can use the same guarded wallet."
+ },
+ {
+  "id": "s8",
+  "scene": 8,
+  "at": 145.0,
+  "text": "Next: authority that agents pass to other agents, narrower at every step."
+ },
+ {
+  "id": "s9",
+  "scene": 9,
+  "at": 152.0,
+  "text": "AI agents are becoming economic actors. They need more than wallets."
+ },
+ {
+  "id": "s9b",
+  "scene": 9,
+  "at": 157.6,
+  "text": "That's A-can. AI agents don't get your money. They get temporary, verifiable spending authority."
+ }
+]

@@ -1,0 +1,1 @@
+{"name":"acan-video-renderer","private":true,"type":"module","dependencies":{"@fontsource/ibm-plex-mono":"^5.2.6","@fontsource/instrument-sans":"^5.2.6","playwright":"^1.63.0"}}

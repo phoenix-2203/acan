@@ -14,5 +14,8 @@ vendor/bb-crs/
 vendor/ctd/
 test_snapshots/
 
-# demo video recordings (large; never committed)
-video/
+# demo video: recordings, frames and renders are large; never committed
+video/recordings/
+video/frames/
+video/renders/
+video/renderer/node_modules/
