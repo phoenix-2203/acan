@@ -6,6 +6,9 @@
  *   POST /chat/message       {text}               the user types
  *   POST /chat/choose        {optionsId, optionId} the user taps an option
  *   POST /chat/reset         start a new conversation
+ *   POST /agent/rule         {ruleId} pay under a new rule from now on (the dashboard
+ *                            calls this after the guardian approves a drafted policy;
+ *                            also saved to .env as AGENT_RULE_ID)
  *   POST /policy/draft       {text}  turn "give my agent $5 for 24 hours" into a
  *                            reviewable allowance (the dashboard shows it; the
  *                            guardian's passkey is what creates it)
@@ -17,7 +20,7 @@
  * Usage: npm run agent:chat:server   (then open the dashboard: npm run web)
  */
 import express from "express";
-import { loadEnv } from "@acan/core";
+import { loadEnv, saveEnv } from "@acan/core";
 import { ChatEngine } from "./chat-engine.js";
 import { merchantPins, merchantUrls } from "./merchants.js";
 import { draftPolicy, type MerchantInfo } from "./policy-draft.js";
@@ -30,7 +33,7 @@ const ORIGINS = (process.env.DASHBOARD_ORIGIN ?? "http://localhost:5173,http://1
 const mode: Mode = process.env.ACAN_MODE === "private" ? "private" : "public";
 const autopilot = process.env.AGENT_AUTOPILOT === "1";
 
-const wallet = new AgentWallet(mode, (l) => console.log(l));
+let wallet = new AgentWallet(mode, (l) => console.log(l));
 const newEngine = () =>
   new ChatEngine({ wallet, merchants: merchantUrls(), pins: merchantPins(), autopilot });
 let engine = newEngine();
@@ -91,6 +94,19 @@ app.post("/chat/reset", (_req, res) => {
   engine = newEngine();
   resets++;
   res.json({ ok: true, generation: generation() });
+});
+
+app.post("/agent/rule", async (req, res) => {
+  const ruleId = req.body?.ruleId;
+  if (!Number.isInteger(ruleId) || ruleId < 0) return void res.status(400).json({ error: "body must be {ruleId}" });
+  if (engine.busy) return void res.status(409).json({ error: "the agent is still working" });
+  await wallet.close().catch(() => {});
+  wallet = new AgentWallet(mode, (l) => console.log(l), ruleId);
+  saveEnv({ AGENT_RULE_ID: String(ruleId) });
+  engine = newEngine();
+  resets++;
+  console.log(`now paying under rule #${ruleId} (saved to .env)`);
+  res.json({ ok: true, ruleId });
 });
 
 app.post("/policy/draft", async (req, res) => {

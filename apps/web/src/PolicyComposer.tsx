@@ -93,6 +93,12 @@ export function PolicyComposer(props: {
             }
           : undefined;
       const g = await grantAgent(agentKey, usdcToStroops(draft.budgetUsdc), periodLedgers, expires, allowlist);
+      // Tell the local agent service to pay under the new rule (best effort).
+      await fetch(`${AGENT_CHAT_URL}/agent/rule`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ruleId: g.ruleId }),
+      }).catch(() => undefined);
       setDraft(null);
       setText("");
       props.onGranted(g);
