@@ -30,7 +30,10 @@ const wallet = new AgentWallet(mode, (l) => console.log(l));
 const newEngine = () =>
   new ChatEngine({ wallet, merchants: merchantUrls(), pins: merchantPins(), autopilot });
 let engine = newEngine();
-let generation = 1;
+// Changes on reset and on restart, so the dashboard knows to reload the conversation.
+const started = Date.now().toString(36);
+let resets = 0;
+const generation = () => `${started}.${resets}`;
 
 const app = express();
 app.use(express.json({ limit: "16kb" }));
@@ -49,7 +52,7 @@ app.use((req, res, next) => {
 app.get("/chat", (req, res) => {
   const after = Number(req.query.after ?? 0) || 0;
   res.json({
-    generation,
+    generation: generation(),
     model: engine.modelLabel,
     mode,
     autopilot,
@@ -82,8 +85,8 @@ app.post("/chat/choose", (req, res) => {
 app.post("/chat/reset", (_req, res) => {
   if (engine.busy) return void res.status(409).json({ error: "the agent is still working" });
   engine = newEngine();
-  generation++;
-  res.json({ ok: true, generation });
+  resets++;
+  res.json({ ok: true, generation: generation() });
 });
 
 app.listen(PORT, "127.0.0.1", (err?: Error) => {
