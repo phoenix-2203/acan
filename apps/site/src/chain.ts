@@ -152,10 +152,12 @@ export async function spendingLimit(account: string, ruleId: number, now: number
 }
 
 export interface MerchantPolicyView {
-  version: "0.1" | "0.2";
+  version: "0.1" | "0.2" | "0.3";
   recipients: { address: string; cap: bigint; spent: bigint }[];
   periodLedgers?: number;
   maxPayments?: number;
+  /** Largest single payment (v0.3); 0n = no limit. */
+  maxPerPayment?: bigint;
   payments?: number;
 }
 
@@ -176,7 +178,7 @@ export async function merchantPolicy(
     const state = await read(policy, "get_state", args);
     const spent = toMap(state.spent);
     return {
-      version: "0.2",
+      version: version === "0.3" ? "0.3" : "0.2",
       recipients: (params.recipients ?? []).map((r: any) => ({
         address: String(r.address),
         cap: BigInt(r.cap),
@@ -184,6 +186,7 @@ export async function merchantPolicy(
       })),
       periodLedgers: Number(params.period_ledgers),
       maxPayments: Number(params.max_payments),
+      maxPerPayment: BigInt(params.max_per_payment ?? 0),
       payments: Number(state.payments),
     };
   } catch {

@@ -178,6 +178,7 @@ export function AccountView(p: AccountViewProps) {
                   <div className="muted small">
                     May only pay
                     {merchant.maxPayments ? ` · at most ${merchant.maxPayments} payments per period (${merchant.payments ?? 0} used)` : ""}
+                    {merchant.maxPerPayment ? ` · at most ${units(merchant.maxPerPayment)} ${p.tokenLabel} per payment` : ""}
                   </div>
                   {merchant.recipients.map((r) =>
                     r.cap > 0n ? (
@@ -187,7 +188,7 @@ export function AccountView(p: AccountViewProps) {
                         <a href={explorerFor(r.address)} target="_blank" rel="noreferrer">
                           {name(r.address)}
                         </a>
-                        {merchant.version === "0.2" && <span className="muted"> · no cap of its own</span>}
+                        {merchant.version !== "0.1" && <span className="muted"> · no cap of its own</span>}
                       </div>
                     ),
                   )}

@@ -54,9 +54,12 @@ export interface GrantSettings {
   /** Merchant budget policy contract and its version, if the allowlist is on. */
   policy?: { address: string; version: string };
   maxPayments: number;
+  /** Largest single payment in stroops; 0n = none (policy v0.3 only). */
+  maxPerPayment: bigint;
 }
 
-export interface SavedGrant extends Omit<GrantSettings, "limit" | "shops"> {
+export interface SavedGrant extends Omit<GrantSettings, "limit" | "shops" | "maxPerPayment"> {
+  maxPerPayment?: string;
   ruleId: number;
   limit: string;
   shops: { name: string; address: string; cap: string }[];
@@ -200,6 +203,8 @@ export class Sandbox {
               recipients: s.shops.map((x) => ({ address: x.address, cap: x.cap })),
               periodLedgers: s.periodLedgers,
               maxPayments: s.maxPayments,
+              maxPerPayment: s.policy.version === "0.3" ? s.maxPerPayment : 0n,
+              version: s.policy.version === "0.3" ? "0.3" : "0.2",
             }),
       );
     }
@@ -229,6 +234,7 @@ export class Sandbox {
       shops: s.shops.map((x) => ({ name: x.name, address: x.address, cap: x.cap.toString() })),
       policy: s.policy && s.shops.length > 0 ? s.policy : undefined,
       maxPayments: s.maxPayments,
+      maxPerPayment: s.maxPerPayment.toString(),
     };
     this.state.grant = grant;
     save(this.state);

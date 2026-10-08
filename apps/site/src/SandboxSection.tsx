@@ -40,6 +40,8 @@ export function SandboxSection() {
     DEPLOYMENT.merchants.map((m, i) => ({ ...m, on: true, cap: i === 0 ? "3" : "2" })),
   );
   const [maxPayments, setMaxPayments] = useState("10");
+  const perPaymentSupported = policy?.version === "0.3";
+  const [maxPerPayment, setMaxPerPayment] = useState("2");
 
   const names = useMemo(() => {
     const n: Record<string, string> = {};
@@ -92,6 +94,7 @@ export function SandboxSection() {
           shops: useAllowlist ? chosen : [],
           policy: useAllowlist ? policy : undefined,
           maxPayments: Number(maxPayments) || 0,
+          maxPerPayment: perPaymentSupported && maxPerPayment.trim() ? toUnits(maxPerPayment) : 0n,
         },
         (m) => setBusy(m),
       );
@@ -248,6 +251,13 @@ export function SandboxSection() {
                       At most
                       <input className="narrow" value={maxPayments} onChange={(e) => setMaxPayments(e.target.value)} />
                       payments per day (0 = no limit)
+                    </label>
+                  )}
+                  {useAllowlist && perPaymentSupported && (
+                    <label className="inline small">
+                      No single payment above
+                      <input className="narrow" value={maxPerPayment} onChange={(e) => setMaxPerPayment(e.target.value)} />
+                      XLM (blank = no limit)
                     </label>
                   )}
                 </fieldset>
