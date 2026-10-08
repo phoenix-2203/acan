@@ -163,3 +163,26 @@ button.small-btn { padding: 6px 10px; font-size: 12px; font-weight: 500; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .block-card.medium .block-title { color: #f2b33d; }
 }
+
+/* plain-language policy */
+.composer { display: grid; gap: 8px; margin-bottom: 14px; }
+.composer-label { font-weight: 600; font-size: 14px; }
+.composer-row { display: flex; gap: 8px; align-items: stretch; }
+.composer-row textarea { flex: 1; min-width: 0; font: 14px "Instrument Sans", sans-serif; padding: 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical; }
+.or { margin: 6px 0 2px; font-weight: 600; }
+.policy-card { border: 1px solid var(--accent); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 10px; }
+.policy-title { display: grid; gap: 2px; }
+.policy-title b { font-size: 16px; }
+.policy-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 14px; }
+.policy-card dt { color: var(--muted); }
+.policy-card dd { margin: 0; }
+.tiers { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 13px; }
+.tier { padding: 7px 10px 7px 30px; border-radius: 8px; position: relative; }
+.tier::before { content: ""; position: absolute; left: 11px; top: 12px; width: 10px; height: 10px; border-radius: 50%; }
+.tier.auto { background: var(--ok-bg); }
+.tier.auto::before { background: var(--ok); }
+.tier.ask { background: color-mix(in srgb, #f2b33d 16%, var(--surface)); }
+.tier.ask::before { background: #e0a020; }
+.tier.block { background: var(--danger-bg); }
+.tier.block::before { background: var(--danger); }
+.policy-actions { display: flex; gap: 8px; }

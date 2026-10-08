@@ -34,6 +34,7 @@ import {
 } from "./guardian";
 import { auditCsv, auditJson, download } from "./audit-export";
 import { AgentChat } from "./AgentChat";
+import { PolicyComposer } from "./PolicyComposer";
 
 type Busy =
   | null
@@ -406,6 +407,16 @@ export default function App() {
         <div className="step">2</div>
         <div className="body">
           <h2>Authorize an agent</h2>
+          <PolicyComposer
+            config={config}
+            disabled={!account || busy !== null}
+            run={(fn) => void run("grant", fn)}
+            onGranted={(g) => {
+              setNotice(`Agent authorized under rule #${g.ruleId}. Copy the .env lines below into your project.`);
+              void refresh();
+            }}
+          />
+          <p className="muted or">Or set it up by hand:</p>
           <p className="muted">
             Paste the agent's public key from <code>npm run setup</code>. It will only be able to call the USDC
             contract, within this allowance.
