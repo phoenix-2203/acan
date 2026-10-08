@@ -28,9 +28,12 @@ APIs, and lets the agent pay **privately** without escaping that cap.
   test for each.
 
 **Try it without installing anything:** the demo site
-(<https://phoenix-2203.github.io/acan/>) creates a passkey smart account in
-your browser, gives an agent key a capped allowance, and lets you watch the
-smart account refuse a prompt-injected payment on testnet. It also shows the
+(<https://acan-demo.duckdns.org>, mirrored at <https://phoenix-2203.github.io/acan/>)
+creates a passkey smart account in your browser, gives an agent key a capped
+allowance, and lets you chat with an AI agent that spends from it. Ask it to buy
+something, then try a prompt injection and watch your own smart account refuse it on
+testnet. The AI runs behind a small relay (`apps/relay`) that holds the API key; the
+wallet, the agent's key and the passkey stay in your browser. The site also shows the
 live state of this project's own deployment.
 
 Built for the *Find Your Way* hackathon (General Track). Everything runs on
