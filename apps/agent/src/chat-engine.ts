@@ -11,7 +11,7 @@
  * The model never buys on its own unless autopilot is switched on. Prices
  * shown on options come from the merchant's catalog, not from the model.
  */
-import { usdcToStroops } from "@acan/core";
+import { ReceiptRecorder, txHashOf, usdcToStroops, type SignedReceipt, type TaskReceipt } from "@acan/core";
 import { createChat, type Chat, type Tool, type ToolCall } from "./llm.js";
 import { purchaseUrl } from "./merchants.js";
 import type { Purchase } from "./wallet.js";
@@ -23,6 +23,10 @@ export interface ChatWallet {
   allowance(): Promise<{ limitUsdc: string; spentUsdc: string; remainingUsdc: string; periodLedgers: number }>;
   /** Raw USDC transfer from the smart account (policies decide). */
   transfer?(to: string, amount: bigint): Promise<Purchase>;
+  /** Who is paying, for task receipts. */
+  receiptBase?(): Pick<TaskReceipt, "network" | "agent" | "smartAccount" | "ruleId" | "mode">;
+  /** Sign a receipt with the agent's key. */
+  signReceipt?(r: TaskReceipt): SignedReceipt;
 }
 
 export type OptionAction =
@@ -171,6 +175,7 @@ export class ChatEngine {
   readonly autopilot: boolean;
   /** Called after every new event (for live UIs). */
   onEvent?: (e: ChatEvent) => void;
+  private recorder?: ReceiptRecorder;
 
   constructor(private readonly opts: ChatEngineOptions) {
     this.autopilot = opts.autopilot ?? false;
@@ -197,6 +202,7 @@ export class ChatEngine {
     if (!t) return;
     await this.exclusive(async () => {
       this.pending = undefined;
+      await this.startReceipt(t);
       this.emit({ type: "user", text: t });
       this.chat.say(t);
       await this.run();
@@ -221,7 +227,7 @@ export class ChatEngine {
       if (a.kind === "transfer") {
         const amount = usdcToStroops(a.amountUsdc);
         const r = await this.opts.wallet.transfer!(a.to, amount);
-        await this.emitPayment(r, option.label, a.recipientName);
+        await this.emitPayment(r, option.label, a.recipientName, { item: "transfer", scheme: "transfer", address: a.to });
         this.chat.say(
           `I picked "${option.label}". Result: ${JSON.stringify(r.ok ? { sentUsdc: r.priceUsdc } : { status: r.status, reason: r.reason })}`,
         );
@@ -233,7 +239,12 @@ export class ChatEngine {
         a.kind === "buy"
           ? await this.opts.wallet.buy(a.url, this.pinFor(a.merchant))
           : await this.opts.wallet.requestApproval(a.url, a.reason, undefined, this.pinFor(a.merchant));
-      await this.emitPayment(r, option.label, a.merchantName ?? a.merchant);
+      await this.emitPayment(r, option.label, a.merchantName ?? a.merchant, {
+        item: new URL(a.url).pathname + new URL(a.url).search,
+        scheme: r.scheme ?? "exact",
+        approved: a.kind === "approve",
+        address: this.pinFor(a.merchant),
+      });
       if (r.status === "blocked" && a.kind === "buy") {
         // The engine (not the model) offers the passkey route for a refused purchase.
         const high = r.refusal?.severity === "high";
@@ -360,7 +371,11 @@ export class ChatEngine {
         const p = purchaseUrl(this.opts.merchants, call.input.merchant, call.input.path, call.input.query);
         if (!p.ok) return { output: JSON.stringify({ error: p.error }) };
         const r = await this.opts.wallet.buy(p.url, this.pinFor(p.merchant));
-        await this.emitPayment(r, `${this.catalogs.get(p.merchant)?.name ?? p.merchant} ${p.path}`, this.catalogs.get(p.merchant)?.name ?? p.merchant);
+        await this.emitPayment(r, `${this.catalogs.get(p.merchant)?.name ?? p.merchant} ${p.path}`, this.catalogs.get(p.merchant)?.name ?? p.merchant, {
+          item: p.path,
+          scheme: r.scheme ?? "exact",
+          address: this.pinFor(p.merchant),
+        });
         return { output: JSON.stringify(r.ok ? { paidUsdc: r.priceUsdc, untrustedData: r.data } : { status: r.status, reason: r.reason }) };
       }
       default:
@@ -396,7 +411,26 @@ export class ChatEngine {
     return this.opts.pins.get(merchant) ?? this.catalogs.get(merchant)?.payTo;
   }
 
-  private async emitPayment(r: Purchase, label: string, recipient: string): Promise<void> {
+  private async emitPayment(
+    r: Purchase,
+    label: string,
+    recipient: string,
+    meta: { item: string; scheme: string; approved?: boolean; address?: string },
+  ): Promise<void> {
+    if (r.ok && r.priceUsdc) {
+      const tx = txHashOf(r.receipt);
+      this.recorder?.paid({
+        merchant: recipient,
+        address: r.payTo ?? meta.address,
+        item: meta.item,
+        amountUsdc: r.priceUsdc,
+        scheme: meta.scheme.startsWith("exact") ? "exact" : meta.scheme,
+        ...(tx ? { tx } : { voucher: r.receipt }),
+        ...(meta.approved ? { approvedByGuardian: true } : {}),
+      });
+    } else if (r.status === "blocked") {
+      this.recorder?.refused({ recipient, amountUsdc: r.priceUsdc, policy: r.refusal?.policy ?? "Smart account", code: r.refusal?.code ?? null });
+    }
     let block: BlockedPayment | undefined;
     if (r.status === "blocked" && r.refusal) {
       const a = await this.opts.wallet.allowance().catch(() => null);
@@ -410,6 +444,21 @@ export class ChatEngine {
       };
     }
     this.emit({ type: "payment", status: r.status, label, priceUsdc: r.priceUsdc, receipt: r.receipt, reason: r.reason, block });
+  }
+
+  /** Start recording a task receipt at the conversation's first request. */
+  private async startReceipt(firstRequest: string): Promise<void> {
+    if (this.recorder || !this.opts.wallet.receiptBase) return;
+    this.recorder = new ReceiptRecorder({ ...this.opts.wallet.receiptBase(), task: firstRequest.slice(0, 300) });
+    this.recorder.leftAtStartUsdc = (await this.opts.wallet.allowance().catch(() => null))?.remainingUsdc;
+  }
+
+  /** The conversation's task receipt so far, signed by the agent when the wallet can sign. */
+  async receipt(): Promise<SignedReceipt | TaskReceipt | null> {
+    if (!this.recorder) return null;
+    const a = await this.opts.wallet.allowance().catch(() => undefined);
+    const r = this.recorder.build({ allowance: a });
+    return this.opts.wallet.signReceipt ? this.opts.wallet.signReceipt(r) : r;
   }
 
   private async reportBudget(): Promise<void> {

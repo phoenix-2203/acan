@@ -22,6 +22,9 @@ import {
   fetchPaid,
   prepareSmartAccountPayment,
   smartAccountTransfer,
+  signReceipt,
+  type SignedReceipt,
+  type TaskReceipt,
   type Refusal,
   requireEnv,
   spendingLimitState,
@@ -113,6 +116,16 @@ export class AgentWallet {
       this.settlements.push(e.tx);
       this.log(`   CONFIDENTIAL TRANSFER (amount hidden on-chain) ${explorerTx(e.tx)}`);
     }
+  }
+
+  /** Identity of this payer, for task receipts. */
+  receiptBase(): Pick<TaskReceipt, "network" | "agent" | "smartAccount" | "ruleId" | "mode"> {
+    return { network: TESTNET.x402Network, agent: this.signer.agentAddress, smartAccount: this.smartAccount, ruleId: this.ruleId, mode: this.mode };
+  }
+
+  /** Sign a task receipt with the agent's key (anyone can verify it with the agent's public key). */
+  signReceipt(r: TaskReceipt): SignedReceipt {
+    return signReceipt(r, (d) => this.signer.signDigest(d), this.signer.agentAddress);
   }
 
   /** Remaining allowance for the current period, in USDC. */

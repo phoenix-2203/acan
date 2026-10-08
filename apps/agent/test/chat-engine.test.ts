@@ -95,6 +95,20 @@ test("the model proposes, the user picks, the wallet pays at the pinned address"
   const types = e.events.map((x) => x.type);
   assert.deepEqual(types, ["user", "activity", "agent", "options", "chosen", "payment", "agent", "budget"]);
   assert.equal(e.pendingOptions, undefined);
+
+  // The conversation's task receipt records the purchase with its transaction.
+  const plain = await e.receipt();
+  assert.equal(plain, null, "no receipt without a wallet that can describe the payer");
+  const w2 = { ...w, receiptBase: () => ({ network: "stellar:testnet", agent: "GAGENT", smartAccount: "CACC", ruleId: 6, mode: "public" as const }) };
+  const s2 = scripted([offerTurn(), { text: "done", calls: [] }]);
+  const e2 = new ChatEngine({ wallet: w2, merchants: [A, B], pins: new Map(), chatFactory: () => s2.chat, fetchImpl: fakeFetch });
+  await e2.send("ledger please");
+  await e2.choose(e2.pendingOptions!.id, e2.pendingOptions!.options[1].id);
+  const r = (await e2.receipt()) as any;
+  assert.equal(r.task, "ledger please");
+  assert.equal(r.totals.spentUsdc, "0.005");
+  assert.deepEqual(r.allowance, { limitUsdc: "0.2", leftAtStartUsdc: "0.195", leftAtEndUsdc: "0.195" });
+  assert.equal(r.payments[0].item, "/api/ledger");
 });
 
 test("a refused payment is offered to the guardian for a passkey approval", async () => {

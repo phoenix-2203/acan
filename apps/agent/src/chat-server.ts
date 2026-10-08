@@ -5,6 +5,7 @@
  *   GET  /chat?after=<seq>   new events, whether the agent is busy, open options
  *   POST /chat/message       {text}               the user types
  *   POST /chat/choose        {optionsId, optionId} the user taps an option
+ *   GET  /chat/receipt       this conversation's task receipt, signed by the agent's key
  *   POST /chat/reset         start a new conversation
  *   POST /agent/rule         {ruleId} pay under a new rule from now on (the dashboard
  *                            calls this after the guardian approves a drafted policy;
@@ -87,6 +88,12 @@ app.post("/chat/choose", (req, res) => {
   if (engine.pendingOptions?.id !== optionsId) return void res.status(409).json({ error: "those options are no longer open" });
   void engine.choose(optionsId, optionId);
   res.status(202).json({ ok: true });
+});
+
+app.get("/chat/receipt", async (_req, res) => {
+  const r = await engine.receipt();
+  if (!r) return void res.status(404).json({ error: "nothing to report yet: ask the agent something first" });
+  res.json(r);
 });
 
 app.post("/chat/reset", (_req, res) => {
