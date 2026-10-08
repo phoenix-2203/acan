@@ -417,7 +417,11 @@ export function ReceiptCard({ data, onClose }: { data: SignedReceipt | TaskRecei
         </button>
       </div>
       <p className="muted small">
-        Check it against the chain: <code>npm run receipt:verify</code> (checks the newest download)
+        Check it against the chain: open the downloaded file at{" "}
+        <a href="https://acan-demo.duckdns.org/#receipt" target="_blank" rel="noreferrer">
+          acan-demo.duckdns.org/#receipt
+        </a>
+        , or run <code>npm run receipt:verify</code> (checks the newest download)
       </p>
     </div>
   );

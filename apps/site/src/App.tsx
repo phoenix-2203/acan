@@ -4,6 +4,7 @@ import { AccountView } from "./AccountView";
 import { explorer } from "./chain";
 import { DEPLOYMENT, REPO_URL } from "./deployment";
 import { SandboxSection } from "./SandboxSection";
+import { ReceiptSection } from "./ReceiptSection";
 
 const tx = (hash: string) => (
   <a className="mono" href={explorer("tx", hash)} target="_blank" rel="noreferrer">
@@ -28,6 +29,7 @@ export default function App() {
         <nav>
           <a href="#try">Try it</a>
           <a href="#live">Live</a>
+          <a href="#receipt">Receipts</a>
           <a href="#how">How it works</a>
           <a href="#security">Security</a>
           <a href={REPO_URL} target="_blank" rel="noreferrer">
@@ -116,6 +118,15 @@ export default function App() {
             focusRule={DEPLOYMENT.agentRuleId}
             historyLedgers={120_000}
           />
+        </section>
+
+        <section id="receipt" className="panel">
+          <h2>Check a receipt</h2>
+          <p className="muted">
+            After a task the agent signs a receipt of everything it spent and everything that was blocked. Open one here to see it, and to
+            check it yourself: the agent's signature, the totals, and every payment against Stellar testnet.
+          </p>
+          <ReceiptSection />
         </section>
 
         <section id="verified" className="panel">

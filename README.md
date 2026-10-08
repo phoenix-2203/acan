@@ -32,7 +32,7 @@ APIs, and lets the agent pay **privately** without escaping that cap.
 creates a passkey smart account in your browser, gives an agent key a capped
 allowance, and lets you chat with an AI agent that spends from it. Ask it to buy
 something, then try a prompt injection and watch your own smart account refuse it on
-testnet. The AI runs behind a small relay (`apps/relay`) that holds the API key; the
+testnet. Its "Check a receipt" section opens a task receipt the agent signed and checks it in the browser: the signature, the totals and every payment against testnet. The AI runs behind a small relay (`apps/relay`) that holds the API key; the
 wallet, the agent's key and the passkey stay in your browser. The site also shows the
 live state of this project's own deployment.
 
