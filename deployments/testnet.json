@@ -6,8 +6,17 @@
   "agentRuleId": 5,
   "agentVault": "GA4Y7NABQIHYBQU5RW6RQL4O4FIWV47ZM52QC7VVWVSL6CZMFTQVXEZL",
   "merchants": [
-    { "name": "Northwind Data", "address": "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT" },
-    { "name": "Southgate Data", "address": "GDZCGACGQKEPUNXJUMLXSGWJ3KS4YT2MYQGDQYH4DCILADI43P7SVFRA" }
+    {
+      "name": "Northwind Data",
+      "address": "GBCYIJE4JZEGQFMZ2CV7G5KWAGGGJDCGEUANYOPFB7QEIO23457OESPT"
+    },
+    {
+      "name": "Southgate Data",
+      "address": "GDZCGACGQKEPUNXJUMLXSGWJ3KS4YT2MYQGDQYH4DCILADI43P7SVFRA"
+    }
   ],
-  "merchantPolicy": { "address": "CBRZI4YRN4KDNNE6N6NQPISB6EK4S5XTFZV3LE2GVKZNFKU3M7VB2DLI", "version": "0.1" }
+  "merchantPolicy": {
+    "address": "CB63ZJFBYRZUKXXJAUEVQUNIJFS2X7ODUHKIQL7EQRMJHIJCTGBTN27Z",
+    "version": "0.2"
+  }
 }
