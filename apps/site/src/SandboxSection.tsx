@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { LEDGERS_PER_DAY } from "@acan/core/browser";
+import { LEDGERS_PER_DAY, explainRefusal, type Refusal } from "@acan/core/browser";
 import { AccountView } from "./AccountView";
-import { explorer, short, toUnits, units } from "./chain";
+import { explorer, latestLedger, short, spendingLimit, toUnits, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
 import { Sandbox, XLM, type Outcome, type Shop } from "./sandbox";
 
@@ -11,6 +11,8 @@ interface LogLine {
   kind: "paid" | "refused" | "info" | "error";
   text: string;
   tx?: string;
+  /** For a refusal: the "why was this blocked?" card, and what approving it would pay. */
+  block?: Refusal & { requested: bigint; to: string; recipient: string; left?: bigint; limit?: bigint; settled?: "approved" | "denied" };
 }
 
 const EXPIRY_CHOICES = [
@@ -54,8 +56,8 @@ export function SandboxSection() {
     return n;
   }, [contractId]);
 
-  const add = (kind: LogLine["kind"], text: string, tx?: string) =>
-    setLog((l) => [{ id: ++seq.current, at: new Date().toLocaleTimeString(), kind, text, tx }, ...l].slice(0, 60));
+  const add = (kind: LogLine["kind"], text: string, tx?: string, block?: LogLine["block"]) =>
+    setLog((l) => [{ id: ++seq.current, at: new Date().toLocaleTimeString(), kind, text, tx, block }, ...l].slice(0, 60));
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label);
@@ -112,7 +114,18 @@ export function SandboxSection() {
     add("info", `Agent: ${label}`);
     const r: Outcome = await sb().agentPays(to, amount);
     if (r.ok) add("paid", `PAID ${units(amount)} XLM to ${names[to] ?? short(to)}`, r.tx);
-    else if (r.refused) add("refused", `REFUSED by the smart account: ${r.reason}`);
+    else if (r.refused) {
+      const g = sb().grant;
+      const s = g && contractId ? await spendingLimit(contractId, g.ruleId, await latestLedger()).catch(() => null) : null;
+      add("refused", `REFUSED by the smart account: ${r.reason}`, undefined, {
+        ...explainRefusal(r.code),
+        requested: amount,
+        to,
+        recipient: names[to] ?? `${short(to)} (not a listed shop)`,
+        left: s ? s.limit - s.spent : undefined,
+        limit: s?.limit,
+      });
+    }
     else add("error", `Not sent: ${r.reason}`);
     return r;
   }
@@ -143,6 +156,18 @@ export function SandboxSection() {
         await s.go();
       }
       add("info", "Script finished. Every refusal above came from the smart account on testnet, not from this page.");
+    });
+
+  const settle = (id: number, settled: "approved" | "denied") =>
+    setLog((ls) => ls.map((x) => (x.id === id && x.block ? { ...x, block: { ...x.block, settled } } : x)));
+
+  const approveOnce = (l: LogLine) =>
+    run("Approve with your passkey…", async () => {
+      const b = l.block!;
+      const r = await sb().approveOnce(b.to, b.requested);
+      if (!r.ok) throw new Error(`Approval not sent: ${r.reason}`);
+      settle(l.id, "approved");
+      add("paid", `APPROVED by the guardian's passkey: ${units(b.requested)} XLM to ${b.recipient}. The agent's allowance is unchanged.`, r.tx);
     });
 
   const revoke = () =>
@@ -323,17 +348,63 @@ export function SandboxSection() {
 
       {log.length > 0 && (
         <div className="console" aria-live="polite">
-          {log.map((l) => (
-            <div key={l.id} className={`line ${l.kind}`}>
-              <span className="mono muted">{l.at}</span>
-              <span>{l.text}</span>
-              {l.tx && (
-                <a className="mono" href={explorer("tx", l.tx)} target="_blank" rel="noreferrer">
-                  {l.tx.slice(0, 8)}…
-                </a>
-              )}
-            </div>
-          ))}
+          {log.map((l) =>
+            l.block ? (
+              <div key={l.id} className={`block-card ${l.block.severity}`} role="alert">
+                <div className="block-head">
+                  <span className="mono muted">{l.at}</span>
+                  <b>Payment blocked: {l.block.title}</b>
+                </div>
+                <dl>
+                  <dt>Requested</dt>
+                  <dd>{units(l.block.requested)} XLM</dd>
+                  <dt>To</dt>
+                  <dd>{l.block.recipient}</dd>
+                  <dt>Stopped by</dt>
+                  <dd>
+                    {l.block.policy}
+                    {l.block.code !== null && <span className="mono muted"> (#{l.block.code})</span>}
+                  </dd>
+                  {l.block.left !== undefined && l.block.limit !== undefined && (
+                    <>
+                      <dt>Allowance left</dt>
+                      <dd>
+                        {units(l.block.left)} of {units(l.block.limit)} XLM today
+                      </dd>
+                    </>
+                  )}
+                </dl>
+                <p>{l.block.reason}</p>
+                <p className="no-funds">No funds were transferred.</p>
+                {!l.block.settled && contractId && (
+                  <div className="block-actions">
+                    <span className="small muted">
+                      {l.block.severity === "high"
+                        ? "As the guardian you can still approve this one payment, but only do it if you know who this is."
+                        : "As the guardian you can approve this one payment. The agent's allowance stays as it is."}
+                    </span>
+                    <button className="secondary" onClick={() => approveOnce(l)} disabled={!!busy}>
+                      Approve once with passkey
+                    </button>
+                    <button className="secondary" onClick={() => settle(l.id, "denied")} disabled={!!busy}>
+                      Deny
+                    </button>
+                  </div>
+                )}
+                {l.block.settled && <p className="small muted">Guardian {l.block.settled} this payment.</p>}
+              </div>
+            ) : (
+              <div key={l.id} className={`line ${l.kind}`}>
+                <span className="mono muted">{l.at}</span>
+                <span>{l.text}</span>
+                {l.tx && (
+                  <a className="mono" href={explorer("tx", l.tx)} target="_blank" rel="noreferrer">
+                    {l.tx.slice(0, 8)}…
+                  </a>
+                )}
+              </div>
+            ),
+          )}
         </div>
       )}
 

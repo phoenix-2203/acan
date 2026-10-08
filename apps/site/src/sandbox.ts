@@ -265,6 +265,18 @@ export class Sandbox {
     }
   }
 
+  /**
+   * The guardian approves one refused payment: their passkey signs this single
+   * transfer under their own rule (#0), so the agent's allowance is untouched.
+   */
+  async approveOnce(to: string, amount: bigint): Promise<Outcome> {
+    await this.connect();
+    const r = await this.kit.transfer(XLM, to, Number(amount) / 1e7, { resolveContextRuleIds: () => [0] });
+    return r.success
+      ? { ok: true, tx: r.hash }
+      : { ok: false, refused: false, code: contractErrorCode(r.error), reason: r.error?.message ?? "Approval failed" };
+  }
+
   /** Step 4: the guardian's passkey deletes the agent's rule. */
   async revoke(): Promise<void> {
     const g = this.state.grant;

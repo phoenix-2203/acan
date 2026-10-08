@@ -204,3 +204,22 @@ td:first-child { width: 48%; }
   .console .line, .activity li { grid-template-columns: 1fr; gap: 2px; }
   td:first-child { width: auto; }
 }
+
+/* why was this blocked? */
+.console .block-card { margin: 6px 12px; }
+.block-card { border: 1px solid var(--danger); background: var(--danger-bg); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.block-card.medium { border-color: #c98a12; background: color-mix(in srgb, #f2b33d 14%, var(--surface)); }
+.block-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.block-head b { color: var(--danger); }
+.block-card.medium .block-head b { color: #9a6200; }
+.block-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0 0 6px; }
+.block-card dt { color: var(--muted); }
+.block-card dd { margin: 0; overflow-wrap: anywhere; }
+.block-card p { margin: 4px 0 0; }
+.block-card .no-funds { font-weight: 600; }
+.block-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.block-actions .small { flex-basis: 100%; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .block-card.medium .block-head b { color: #f2b33d; }
+}
+:root[data-theme="dark"] .block-card.medium .block-head b { color: #f2b33d; }
