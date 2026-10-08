@@ -11,3 +11,4 @@ export * from "./payment-id.js";
 export * from "./merchant-policy.js";
 export * from "./events.js";
 export * from "./errors.js";
+export * from "./receipt.js";

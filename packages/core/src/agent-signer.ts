@@ -73,6 +73,15 @@ export class SmartAccountAgentSigner {
   }
 
   /**
+   * Sign an off-chain digest (e.g. a task receipt) with the agent's key. Never
+   * used for authorization entries: those go through {@link signEntry}.
+   */
+  signDigest(digest: Buffer): Buffer {
+    if (digest.length !== 32) throw new Error("expected a 32-byte digest");
+    return Buffer.from(this.keypair.sign(digest));
+  }
+
+  /**
    * Sign one authorization entry whose top-level credentials belong to the
    * smart account. Returns a new, signed entry (the input is not mutated).
    */

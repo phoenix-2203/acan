@@ -5,3 +5,4 @@ export * from "./agent-signer.js";
 export * from "./smart-account-transfer.js";
 export * from "./merchant-policy.js";
 export * from "./events.js";
+export * from "./receipt.js";
