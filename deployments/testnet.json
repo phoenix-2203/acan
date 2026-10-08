@@ -18,5 +18,6 @@
   "merchantPolicy": {
     "address": "CA2PF5YGJZCI7JD2NVWROQ7TBHWVEE2P6MX5IYUQUMAYBM6LAWPZJ2FG",
     "version": "0.3"
-  }
+  },
+  "aiRelay": "https://acan-ai.duckdns.org"
 }
