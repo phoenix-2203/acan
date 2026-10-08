@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { verifyReceiptSignature, type SignedReceipt, type TaskReceipt } from "@acan/core/browser";
+import { download } from "./audit-export";
+import { explorer, short } from "./acan";
 
 /** The local agent chat service (npm run agent:chat:server). */
 export const AGENT_CHAT_URL = (import.meta as any).env?.VITE_AGENT_CHAT_URL ?? "http://127.0.0.1:4040";
@@ -102,6 +105,7 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
   const [offline, setOffline] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<SignedReceipt | TaskReceipt | null>(null);
   const events = useRef<ChatEvent[]>([]);
   const generation = useRef("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -122,8 +126,10 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
           generation.current = s.generation;
           if (after > 0) s = await get(0);
           events.current = s.events;
-        } else if (s.events.length) {
-          events.current = [...events.current, ...s.events];
+        } else {
+          // Only events newer than what we have (never show one twice).
+          const fresh = s.events.filter((e) => e.seq > after);
+          if (fresh.length) events.current = [...events.current, ...fresh];
         }
         if (!stop) {
           setState({ ...s, events: events.current });
@@ -163,6 +169,18 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
     }
   }
 
+  async function showReceipt() {
+    setError(null);
+    try {
+      const r = await fetch(`${AGENT_CHAT_URL}/chat/receipt`);
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      setReceipt(body);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const send = (t: string) => {
     const msg = t.trim();
     if (!msg) return;
@@ -184,7 +202,10 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
     <div className="chat">
       <div className="chat-meta muted small">
         {state.model} · {state.mode} payments · {state.autopilot ? "autopilot on" : "you approve each purchase"}
-        <button className="link" onClick={() => void post("/chat/reset")} disabled={busy}>
+        <button className="link" onClick={() => void showReceipt()} disabled={busy || state.events.length === 0}>
+          Task receipt
+        </button>
+        <button className="link" onClick={() => { setReceipt(null); void post("/chat/reset"); }} disabled={busy}>
           New conversation
         </button>
       </div>
@@ -287,6 +308,7 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
         </div>
       )}
 
+      {receipt && <ReceiptCard data={receipt} onClose={() => setReceipt(null)} />}
       {error && <div className="banner error">{error}</div>}
       <form
         className="chat-input"
@@ -306,6 +328,97 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
           Send
         </button>
       </form>
+    </div>
+  );
+}
+
+/** A task receipt: what the agent spent, where, and what was refused; signed by the agent's key. */
+export function ReceiptCard({ data, onClose }: { data: SignedReceipt | TaskReceipt; onClose: () => void }) {
+  const signed = "receipt" in data ? data : null;
+  const r = signed ? signed.receipt : (data as TaskReceipt);
+  const valid = signed ? verifyReceiptSignature(signed) : null;
+  return (
+    <div className="receipt">
+      <div className="receipt-head">
+        <b>Task receipt</b>
+        <button className="link" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <div className="muted small">{r.task}</div>
+      <dl>
+        {r.allowance && (
+          <>
+            <dt>Allowance</dt>
+            <dd>
+              {r.allowance.leftAtStartUsdc} → {r.allowance.leftAtEndUsdc} of {r.allowance.limitUsdc} USDC
+            </dd>
+          </>
+        )}
+        <dt>Spent</dt>
+        <dd>
+          <b>{r.totals.spentUsdc} USDC</b> in {r.totals.payments} payment(s)
+        </dd>
+        {r.totals.returnedUsdc && (
+          <>
+            <dt>Returned</dt>
+            <dd>{r.totals.returnedUsdc} USDC</dd>
+          </>
+        )}
+        <dt>Blocked</dt>
+        <dd>{r.totals.blocked}</dd>
+        <dt>Approvals</dt>
+        <dd>{r.totals.guardianApprovals} by the guardian's passkey</dd>
+        <dt>Payments</dt>
+        <dd>{r.mode === "private" ? "private (vouchers, settled confidentially)" : "public"}</dd>
+      </dl>
+      {r.merchants.length > 0 && (
+        <table className="receipt-table">
+          <tbody>
+            {r.merchants.map((m) => (
+              <tr key={m.address ?? m.merchant}>
+                <td>{m.merchant}</td>
+                <td className="mono">{m.spentUsdc} USDC</td>
+                <td className="muted">{m.payments}×</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <ul className="receipt-lines">
+        {r.payments.map((p, i) => (
+          <li key={i}>
+            <span className="mono">{p.amountUsdc}</span> {p.merchant} <span className="muted">{p.item}</span>
+            {p.approvedByGuardian && <span className="tag">approved</span>}{" "}
+            {p.tx ? (
+              <a className="mono" href={explorer("tx", p.tx)} target="_blank" rel="noreferrer">
+                {p.tx.slice(0, 8)}…
+              </a>
+            ) : (
+              <span className="muted small">voucher</span>
+            )}
+          </li>
+        ))}
+        {r.blocked.map((b, i) => (
+          <li key={`b${i}`} className="blocked">
+            blocked: {b.amountUsdc ?? "?"} USDC to {b.recipient} <span className="muted">({b.policy})</span>
+          </li>
+        ))}
+      </ul>
+      <div className="receipt-foot">
+        <span className={`small ${valid ? "ok-text" : "muted"}`}>
+          {valid === null ? "Unsigned." : valid ? `Signed by agent key ${short(r.agent)}: signature valid.` : "Signature does NOT verify."}
+        </span>
+        <button
+          className="ghost"
+          onClick={() => download(`acan-receipt-${r.endedAt.replace(/[:.]/g, "-")}.json`, JSON.stringify(data, null, 2), "application/json")}
+        >
+          Download
+        </button>
+      </div>
+      <p className="muted small">
+        Check it against the chain: <code>npm run receipt:verify -- &lt;file&gt;</code>
+      </p>
     </div>
   );
 }

@@ -186,3 +186,16 @@ button.small-btn { padding: 6px 10px; font-size: 12px; font-weight: 500; }
 .tier.block { background: var(--danger-bg); }
 .tier.block::before { background: var(--danger); }
 .policy-actions { display: flex; gap: 8px; }
+
+/* task receipt */
+.receipt { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); display: grid; gap: 8px; font-size: 14px; }
+.receipt-head { display: flex; justify-content: space-between; align-items: center; }
+.receipt dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0; }
+.receipt dt { color: var(--muted); }
+.receipt dd { margin: 0; }
+.receipt-table { border-collapse: collapse; width: 100%; }
+.receipt-table td { padding: 4px 6px; border-top: 1px solid var(--line); }
+.receipt-lines { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 13px; }
+.receipt-lines .blocked { color: var(--danger); }
+.receipt-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ok-text { color: var(--ok); font-weight: 600; }
