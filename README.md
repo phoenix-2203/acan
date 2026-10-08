@@ -152,9 +152,11 @@ task budget left 0.005 of 0.03 USDC (rule #7 expires on its own)
 ```
 
 **In the browser, no install.** On the demo site, a fresh passkey wallet gave an agent key
-5 XLM a day for two shops. The agent's two shop payments settled. A 10 XLM payment was
-refused by the smart account (`SpendingLimitExceeded`), and so was every payment after the
-guardian revoked the rule.
+5 XLM a day for two shops, with per-shop caps (3 and 2 XLM). The agent's two shop payments
+settled. A prompt-injected
+0.5 XLM payment to an unlisted address was refused (`RecipientNotAllowed`), a 10 XLM payment
+was refused (`SpendingLimitExceeded`), and so was every payment after the guardian revoked
+the rule. The page then read the rule, both caps and the activity back from testnet.
 
 ---
 
