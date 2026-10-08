@@ -250,10 +250,36 @@ guardian's own browser before the passkey signs anything.
   policy contract for OpenZeppelin smart accounts: the agent's rule may only
   `transfer` to recipients the guardian picked (the two merchants and the
   agent's own vault), each with an optional cap of its own per period, plus an
-  optional limit on the number of payments per period. It is installed next to
+  optional limit on the number of payments per period and (v0.3) a largest
+  single payment. It is installed next to
   the spending-limit policy in the same passkey approval, so both must pass for
   every payment. Any other recipient fails with `RecipientNotAllowed` (#3401),
-  a merchant over its cap with `RecipientCapExceeded` (#3406).
+  a merchant over its cap with `RecipientCapExceeded` (#3406), a payment above
+  the per-payment limit with `PaymentTooLarge` (#3408).
+- **Plain-language policies.** In the dashboard, type "Give my research agent $1
+  for the next 24 hours, small purchases only". The local agent service
+  (`npm run agent:chat:server`) has the model draft a policy, then validates
+  and clamps every number. The dashboard shows it as a card: budget, end
+  date, allowed merchants and caps, per-payment limit and privacy. The card also
+  lists the three risk tiers, derived from the numbers rather than written by the
+  model:
+  - pays on its own (small payments to listed merchants);
+  - asks you (over the per-payment limit, a merchant's cap or the budget);
+  - refused on-chain (unlisted addresses, after expiry or revocation).
+
+  Nothing exists until the guardian approves the card with their passkey.
+- **Why was this blocked?** Every refusal is explained in plain words in the
+  chat, the CLI and the demo site: what was asked, to whom, which control
+  stopped it (with its contract error), how much allowance is left, and that no
+  funds moved. Approval requests to an address the guardian never listed are
+  flagged in red before the passkey can sign.
+- **Signed task receipts.** Each task ends with a receipt that lists:
+  - the allowance before and after;
+  - the total spent, per merchant and per payment, with transaction hashes;
+  - blocked attempts and guardian approvals.
+
+  The agent's key signs the receipt. `npm run receipt:verify -- <file>` checks the
+  signature and every payment against the chain.
 - **One-off approvals.** When the allowance blocks a purchase, the agent can
   ask the guardian. The request appears in the dashboard (through the local
   guardian service, `npm run guardian`). The dashboard decodes the
