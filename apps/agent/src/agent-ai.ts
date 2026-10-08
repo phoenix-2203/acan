@@ -11,7 +11,8 @@
  *
  * Model: GROQ_API_KEY (Groq), ANTHROPIC_API_KEY (Claude) or OLLAMA_MODEL (local) in .env.
  */
-import { loadEnv, requireEnv, stroopsToUsdc, usdcToStroops } from "@acan/core";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { ReceiptRecorder, loadEnv, requireEnv, stroopsToUsdc, txHashOf, usdcToStroops } from "@acan/core";
 import { createChat, type Tool, type ToolCall } from "./llm.js";
 import { merchantPins, merchantUrls } from "./merchants.js";
 import { AgentWallet, type Mode } from "./wallet.js";
@@ -221,9 +222,22 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
         bought.add(url);
         if (r.scheme !== "exact (guardian-approved)") merchantsUsed.add(merchant);
         spent.push({ merchant: name, path, price: r.priceUsdc ?? "?", receipt: r.receipt });
+        const tx = txHashOf(r.receipt);
+        receipt?.paid({
+          merchant: name,
+          address: r.payTo ?? pinFor(merchant),
+          item: path,
+          amountUsdc: r.priceUsdc ?? "0",
+          scheme: r.scheme?.startsWith("exact") ? "exact" : r.scheme ?? "exact",
+          ...(tx ? { tx } : { voucher: r.receipt }),
+          ...(call.name === "request_approval" ? { approvedByGuardian: true } : {}),
+        });
         log(`   ${bold("PAID")} ${r.priceUsdc} USDC to ${name} for ${path}  ${dim(r.receipt ?? "")}`);
       } else {
-        if (r.status === "blocked") blocked.add(url);
+        if (r.status === "blocked") {
+          blocked.add(url);
+          receipt?.refused({ recipient: name, amountUsdc: r.priceUsdc, policy: r.refusal?.policy ?? "Smart account", code: r.refusal?.code ?? null });
+        }
         log(`   ${bold(r.status.toUpperCase())} ${path} at ${name}: ${r.reason}`);
         if (r.refusal) {
           log(`     stopped by: ${r.refusal.policy} (${r.refusal.title}). ${r.refusal.reason} No funds were transferred.`);
@@ -295,7 +309,11 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
   }
 }
 
+/** The task receipt (signed by the agent at the end of the run). */
+let receipt: ReceiptRecorder | undefined;
+
 async function main() {
+  receipt = new ReceiptRecorder({ ...wallet.receiptBase(), task: TASK });
   const chat = createChat(SYSTEM, budgetMode ? [...TOOLS, BUDGET_TOOL] : TOOLS);
   console.log(bold(`ACAN AI agent  (${chat.label}, ${mode} payments${budgetMode ? ", task budget" : ""})`));
   if (budgetMode) {
@@ -303,6 +321,7 @@ async function main() {
   } else {
     console.log(`smart account ${wallet.smartAccount}, rule ${wallet.ruleId}`);
     const a = await wallet.allowance();
+    receipt.leftAtStartUsdc = a.remainingUsdc;
     console.log(`allowance left ${a.remainingUsdc} of ${a.limitUsdc} USDC this period\n`);
   }
   console.log(`${bold("Task:")} ${TASK}\n`);
@@ -310,6 +329,7 @@ async function main() {
 
   let answer: string | undefined;
   let failure: unknown;
+  let returned: string | undefined;
   let textOnlyTurns = 0;
   try {
     for (let step = 1; step <= MAX_STEPS && answer === undefined; step++) {
@@ -348,7 +368,7 @@ async function main() {
       for (const m of merchantsUsed) await wallet.closeTab(m);
       // A task budget is done when the task is: send back whatever the vault
       // still holds, so nothing is left idle under the agent's control.
-      if (budget && process.env.RETURN_UNUSED !== "0") await wallet.returnUnused();
+      if (budget && process.env.RETURN_UNUSED !== "0") returned = (await wallet.returnUnused())?.amountUsdc;
     }
   } finally {
     await wallet.close();
@@ -364,14 +384,30 @@ async function main() {
         "The guardian can decrypt them with `npm run audit`.",
     );
   }
+  let after: Awaited<ReturnType<typeof wallet.allowance>> | undefined;
   if (!budgetMode || budget) {
-    const after = await wallet.allowance();
+    after = await wallet.allowance();
     console.log(
       budget
         ? `task budget left ${after.remainingUsdc} of ${after.limitUsdc} USDC (rule #${budget.ruleId} expires on its own)`
         : `allowance left ${after.remainingUsdc} of ${after.limitUsdc} USDC`,
     );
   }
+  // A signed record of the task: every public payment links to its transaction.
+  if (budget) {
+    receipt.base.ruleId = budget.ruleId;
+    receipt.leftAtStartUsdc = budget.amountUsdc;
+  }
+  const signed = wallet.signReceipt(receipt.build({ allowance: after, returnedUsdc: returned }));
+  mkdirSync(".acan/receipts", { recursive: true });
+  const file = `.acan/receipts/receipt-${signed.receipt.endedAt.replace(/[:.]/g, "-")}.json`;
+  writeFileSync(file, JSON.stringify(signed, null, 2));
+  const t = signed.receipt.totals;
+  console.log(
+    `\n${bold("Receipt")} ${file}: spent ${t.spentUsdc} USDC in ${t.payments} payment(s), ${t.blocked} blocked, ` +
+      `${t.guardianApprovals} guardian approval(s)${t.returnedUsdc ? `, ${t.returnedUsdc} USDC returned` : ""}; signed by the agent key. ` +
+      `Check it: npm run receipt:verify -- ${file}`,
+  );
   if (failure) process.exitCode = 1;
 }
 
