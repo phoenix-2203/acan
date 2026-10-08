@@ -20,6 +20,8 @@ export class PaymentRejectedError extends Error {
  * (smart-account-kit CONTRACT_ERROR_REGISTRY: SmartAccount 3000-3016, SpendingLimit 3220-3227).
  */
 export const KNOWN_CODES: Record<number, string> = {
+  10: "BalanceError: the smart account does not hold enough USDC for this payment",
+  13: "TrustlineMissingError: the recipient cannot hold USDC",
   3000: "ContextRuleNotFound: the agent's allowance was revoked",
   3002: "UnvalidatedContext: no active allowance covers this payment (revoked or expired)",
   3003: "ExternalVerificationFailed: the agent's signature was not accepted",
@@ -67,6 +69,13 @@ export interface Refusal {
 }
 
 const REFUSALS: Record<number, Omit<Refusal, "code">> = {
+  // Stellar Asset Contract (the USDC token itself). Simulation runs the token's
+  // own checks before the smart account's __check_auth, so these can come first.
+  6: { title: "Recipient account missing", policy: "USDC token", reason: "The recipient account does not exist on this network.", severity: "high" },
+  8: { title: "Negative amount", policy: "USDC token", reason: "The amount must be positive.", severity: "high" },
+  10: { title: "Not enough USDC", policy: "USDC balance", reason: "The smart account holds less USDC than this payment, so the token refused it before the agent's rules were even consulted.", severity: "medium" },
+  11: { title: "Account frozen for USDC", policy: "USDC token", reason: "The issuer has deauthorized this account's USDC.", severity: "high" },
+  13: { title: "Recipient cannot hold USDC", policy: "USDC token", reason: "The recipient has no USDC trustline.", severity: "high" },
   3000: { title: "Allowance revoked", policy: "Agent's rule", reason: "The guardian deleted this agent's rule, so its key authorizes nothing.", severity: "high" },
   3002: { title: "No active allowance", policy: "Agent's rule (expiry)", reason: "The agent's rule was revoked or has expired.", severity: "high" },
   3003: { title: "Signature not accepted", policy: "Smart account", reason: "The agent's signature did not verify.", severity: "high" },

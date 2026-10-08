@@ -14,6 +14,9 @@ test("refusals carry their contract code and a plain explanation", () => {
   assert.equal(r.severity, "high");
   assert.equal(explainRefusal(3408).severity, "medium");
   assert.equal(explainRefusal(sim(3221)).policy, "Spending limit");
+  // The token's own refusal (seen on testnet: 2 USDC from an account holding 0.69).
+  assert.equal(explainRefusal(sim(10)).title, "Not enough USDC");
+  assert.match(describeSimulationError(sim(10)), /BalanceError/);
 });
 
 test("unknown or missing codes still explain something", () => {
