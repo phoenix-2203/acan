@@ -8,7 +8,7 @@ import {
   createSpendingLimitParams,
   type ContextRule,
 } from "smart-account-kit";
-import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, stroopsToUsdc } from "@acan/core/browser";
+import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
 import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
 
 export const kit = new SmartAccountKit({
@@ -256,18 +256,15 @@ export async function recentPayments(account: string): Promise<Payment[]> {
   const latest = await server.getLatestLedger();
   const startLedger = Math.max(1, latest.sequence - 17_000); // ~1 day
   const fromTopic = nativeToScVal(account, { type: "address" }).toXDR("base64");
-  const res = await server.getEvents({
-    startLedger,
-    filters: [
-      {
-        type: "contract",
-        contractIds: [ASSETS.usdc.sac],
-        topics: [[xdr.ScVal.scvSymbol("transfer").toXDR("base64"), fromTopic, "*", "*"]],
-      },
-    ],
-    limit: 100,
-  });
-  return res.events
+  // getEvents scans 10,000 ledgers per call: follow the cursor up to now.
+  const events = await getEventsSince(server, startLedger, [
+    {
+      type: "contract",
+      contractIds: [ASSETS.usdc.sac],
+      topics: [[xdr.ScVal.scvSymbol("transfer").toXDR("base64"), fromTopic, "*", "*"]],
+    },
+  ]);
+  return events
     .map((e) => ({
       id: e.id,
       txHash: e.txHash,
