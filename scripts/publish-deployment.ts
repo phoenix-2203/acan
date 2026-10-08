@@ -50,6 +50,8 @@ const next = {
           (policy === previous.merchantPolicy?.address ? previous.merchantPolicy.version : "0.3"),
       }
     : undefined,
+  // The demo site's AI relay (apps/relay) is set by hand; keep it.
+  ...(typeof previous.aiRelay === "string" && previous.aiRelay.startsWith("https://") ? { aiRelay: previous.aiRelay } : {}),
 };
 writeFileSync(PATH, JSON.stringify(next, null, 2) + "\n");
 console.log(`wrote ${PATH}:`);

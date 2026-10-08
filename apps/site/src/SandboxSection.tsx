@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { LEDGERS_PER_DAY, explainRefusal, type Refusal } from "@acan/core/browser";
 import { AccountView } from "./AccountView";
+import { AiChat } from "./AiChat";
+import { SandboxAgent, type DemoShop, type PayResult } from "./ai-agent";
 import { explorer, latestLedger, short, spendingLimit, toUnits, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
 import { Sandbox, XLM, type Outcome, type Shop } from "./sandbox";
@@ -15,6 +17,29 @@ interface LogLine {
   block?: Refusal & { requested: bigint; to: string; recipient: string; left?: bigint; limit?: bigint; settled?: "approved" | "denied" };
 }
 
+/**
+ * What the AI agent can buy. The shops are ACAN's two testnet merchant
+ * addresses; paying them is a real testnet payment, but nothing is delivered.
+ * The largest item is above the default 2 XLM per-payment limit on purpose.
+ */
+const DEMO_SHOPS: DemoShop[] = [
+  {
+    ...DEPLOYMENT.merchants[0],
+    items: [
+      { id: "ledger-report", title: "Ledger report", priceXlm: "1" },
+      { id: "market-brief", title: "Market brief", priceXlm: "1.5" },
+      { id: "full-dataset", title: "Full dataset", priceXlm: "2.5" },
+    ],
+  },
+  {
+    ...(DEPLOYMENT.merchants[1] ?? DEPLOYMENT.merchants[0]),
+    items: [
+      { id: "ledger-report", title: "Ledger report", priceXlm: "0.8" },
+      { id: "news-digest", title: "News digest", priceXlm: "0.3" },
+    ],
+  },
+];
+
 const EXPIRY_CHOICES = [
   { minutes: 10, label: "10 minutes" },
   { minutes: 60, label: "1 hour" },
@@ -26,6 +51,9 @@ export function SandboxSection() {
   const sandbox = useRef<Sandbox | null>(null);
   const sb = () => (sandbox.current ??= new Sandbox());
   const [contractId, setContractId] = useState<string | undefined>(() => safe(() => sb().contractId));
+  // The AI agent's tools run outside React's render, so they read the latest account here.
+  const contractIdRef = useRef(contractId);
+  contractIdRef.current = contractId;
   const [grant, setGrant] = useState(() => safe(() => sb().grant));
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +138,13 @@ export function SandboxSection() {
       );
     });
 
+  // Read through refs: the AI agent keeps a reference to pay() from an earlier render.
+  const namesRef = useRef(names);
+  namesRef.current = names;
+
   async function pay(label: string, to: string, amount: bigint) {
+    const names = namesRef.current;
+    const contractId = contractIdRef.current;
     add("info", `Agent: ${label}`);
     const r: Outcome = await sb().agentPays(to, amount);
     if (r.ok) add("paid", `PAID ${units(amount)} XLM to ${names[to] ?? short(to)}`, r.tx);
@@ -144,6 +178,32 @@ export function SandboxSection() {
     },
     { key: "d", label: "Overspend: 10 XLM at once", go: () => pay(`pay ${north.name} 10 XLM in one go`, north.address, 100_000_000n) },
   ];
+
+  const ai = useRef<SandboxAgent | null>(null);
+  if (DEPLOYMENT.aiRelay && !ai.current) {
+    ai.current = new SandboxAgent(DEPLOYMENT.aiRelay.replace(/\/$/, ""), {
+      shops: () => DEMO_SHOPS,
+      allowance: async () => {
+        const g = sb().grant;
+        if (!g || g.revoked || !contractIdRef.current) return null;
+        const s = await spendingLimit(contractIdRef.current, g.ruleId, await latestLedger());
+        return s ? { limitXlm: units(s.limit), spentXlm: units(s.spent), leftXlm: units(s.limit - s.spent) } : null;
+      },
+      pay: async (to, stroops, label): Promise<PayResult> => {
+        setBusy("The agent is paying…");
+        setError(null);
+        try {
+          const r = await pay(label, to, stroops);
+          if (r.ok) return r;
+          const why = r.refused ? explainRefusal(r.code) : undefined;
+          return { ...r, title: why?.title, policy: why?.policy };
+        } finally {
+          setBusy(null);
+          setRefresh((n) => n + 1);
+        }
+      },
+    });
+  }
 
   const runOne = (s: (typeof scenarios)[number]) =>
     run("The agent is paying…", async () => {
@@ -310,6 +370,13 @@ export function SandboxSection() {
             Each button makes the agent sign a payment with its own key. The smart account checks every policy before any money
             moves. Try to break it.
           </p>
+          {step >= 3 && ai.current && (
+            <>
+              <h4 className="ai-title">Talk to the AI agent</h4>
+              <AiChat agent={ai.current} attacker={sb().attacker.publicKey()} disabled={!!busy || step !== 3} />
+              <h4 className="ai-title">Or run the scripted attempts</h4>
+            </>
+          )}
           {step >= 3 && (
             <div className="scenarios">
               {scenarios.map((s) => (

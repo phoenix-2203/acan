@@ -8,6 +8,8 @@ export interface Deployment {
   agentVault?: string;
   merchants: { name: string; address: string }[];
   merchantPolicy?: { address: string; version: string };
+  /** HTTPS address of the AI relay (apps/relay) for the sandbox's AI chat; no chat without it. */
+  aiRelay?: string;
 }
 
 export const DEPLOYMENT = raw as Deployment;
