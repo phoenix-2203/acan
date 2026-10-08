@@ -114,6 +114,7 @@ export default function App() {
             names={liveNames}
             merchantPolicy={DEPLOYMENT.merchantPolicy}
             focusRule={DEPLOYMENT.agentRuleId}
+            historyLedgers={120_000}
           />
         </section>
 

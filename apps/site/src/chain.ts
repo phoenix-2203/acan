@@ -16,7 +16,7 @@ import {
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
-import { ASSETS, OZ_SMART_ACCOUNT, TESTNET } from "@acan/core/browser";
+import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, getEventsSince } from "@acan/core/browser";
 
 export const server = new rpc.Server(TESTNET.rpcUrl);
 const READER = Keypair.random().publicKey();
@@ -220,23 +220,25 @@ export interface ActivityItem {
  * Recent on-chain activity of a smart account: token transfers out of it and
  * changes to its rules, from Soroban events (as far back as the RPC keeps).
  */
-export async function activity(account: string, tokens: string[], names: Record<string, string> = {}): Promise<ActivityItem[]> {
+export async function activity(
+  account: string,
+  tokens: string[],
+  names: Record<string, string> = {},
+  /** How far back to look, in ledgers (17,280 is about a day). */
+  windowLedgers = 17_280,
+): Promise<ActivityItem[]> {
   const health = await server.getHealth();
   const latest = health.latestLedger;
-  const oldest = (health as any).oldestLedger ?? latest - 17_280;
-  const startLedger = Math.max(oldest + 1, latest - 120_000);
+  const startLedger = Math.max(health.oldestLedger + 1, latest - windowLedgers);
   const fromTopic = addr(account).toXDR("base64");
   const sym = (s: string) => xdr.ScVal.scvSymbol(s).toXDR("base64");
-  const res = await server.getEvents({
-    startLedger,
-    filters: [
-      { type: "contract", contractIds: tokens, topics: [[sym("transfer"), fromTopic, "*", "*"]] },
-      { type: "contract", contractIds: [account] },
-    ],
-    limit: 200,
-  });
+  // getEvents scans 10,000 ledgers per call: follow the cursor up to now.
+  const events = await getEventsSince(server, startLedger, [
+    { type: "contract", contractIds: tokens, topics: [[sym("transfer"), fromTopic, "*", "*"]] },
+    { type: "contract", contractIds: [account] },
+  ]);
   const out: ActivityItem[] = [];
-  for (const e of res.events) {
+  for (const e of events) {
     const topic0 = safeNative(e.topic[0]);
     const base = { id: e.id, ledger: e.ledger, at: e.ledgerClosedAt, txHash: e.txHash };
     if (topic0 === "transfer" && e.contractId && tokens.includes(e.contractId.toString())) {

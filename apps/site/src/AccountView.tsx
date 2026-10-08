@@ -38,6 +38,8 @@ export interface AccountViewProps {
   refreshKey?: number;
   /** Seconds between automatic refreshes (0 = off). */
   autoRefresh?: number;
+  /** How far back the activity list looks, in ledgers (default about a day). */
+  historyLedgers?: number;
 }
 
 /**
@@ -49,6 +51,7 @@ export function AccountView(p: AccountViewProps) {
   const [balance, setBalance] = useState<bigint | null>(null);
   const [rules, setRules] = useState<RuleDetail[] | null>(null);
   const [events, setEvents] = useState<ActivityItem[] | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   // Callers may pass a fresh `names` object on every render: key on its content.
@@ -76,15 +79,18 @@ export function AccountView(p: AccountViewProps) {
       setNow(ledger);
       setBalance(bal);
       setRules(details);
-      activity(p.account, [p.token], names.current)
-        .then(setEvents)
-        .catch(() => setEvents([]));
+      activity(p.account, [p.token], names.current, p.historyLedgers)
+        .then((ev) => {
+          setEvents(ev);
+          setEventsError(null);
+        })
+        .catch((e) => setEventsError(e instanceof Error ? e.message : String(e)));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [p.account, p.token, p.merchantPolicy?.address, p.merchantPolicy?.version, namesKey]);
+  }, [p.account, p.token, p.merchantPolicy?.address, p.merchantPolicy?.version, namesKey, p.historyLedgers]);
 
   useEffect(() => {
     void load();
@@ -195,10 +201,12 @@ export function AccountView(p: AccountViewProps) {
       <div className="label" style={{ marginTop: 18 }}>
         Recent on-chain activity
       </div>
-      {events === null ? (
+      {eventsError && events === null ? (
+        <p className="error">Could not read events: {eventsError}</p>
+      ) : events === null ? (
         <p className="muted small">Reading events…</p>
       ) : events.length === 0 ? (
-        <p className="muted small">No activity in the RPC's retention window (about the last week).</p>
+        <p className="muted small">No activity in the last {duration((p.historyLedgers ?? 17_280) * LEDGER_SECONDS)}.</p>
       ) : (
         <ul className="activity">
           {events.slice(0, 12).map((e) => (
