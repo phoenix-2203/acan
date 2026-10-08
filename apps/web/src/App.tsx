@@ -694,6 +694,12 @@ export default function App() {
                       “{a.reason}”
                     </div>
                     <div className="mono muted small">{a.url}</div>
+                    {a.status === "pending" && config && !config.recipients.some((r) => r.address === a.payTo) && (
+                      <div className="banner error">
+                        Unknown recipient: {short(a.payTo)} is not one of your listed merchants. Approve only if you know
+                        exactly who this is.
+                      </div>
+                    )}
                     {a.status === "pending" &&
                       (problem ? (
                         <div className="banner error">Refusing to sign: {problem}</div>

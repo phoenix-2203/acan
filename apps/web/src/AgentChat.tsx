@@ -14,9 +14,65 @@ type ChatEvent = { seq: number; at: string } & (
   | { type: "user" | "agent" | "activity" | "error"; text: string }
   | { type: "options"; id: string; question: string; options: ChatOption[] }
   | { type: "chosen"; optionsId: string; optionId: string; label: string }
-  | { type: "payment"; status: "paid" | "blocked" | "refused" | "error"; label: string; priceUsdc?: string; receipt?: string; reason?: string }
+  | {
+      type: "payment";
+      status: "paid" | "blocked" | "refused" | "error";
+      label: string;
+      priceUsdc?: string;
+      receipt?: string;
+      reason?: string;
+      block?: BlockedPayment;
+    }
   | { type: "budget"; limitUsdc: string; spentUsdc: string; remainingUsdc: string }
 );
+
+export interface BlockedPayment {
+  title: string;
+  policy: string;
+  reason: string;
+  severity: "medium" | "high";
+  code: number | null;
+  requestedUsdc?: string;
+  recipient: string;
+  allowanceLeftUsdc?: string;
+  limitUsdc?: string;
+}
+
+/** "Why was this blocked?": what was asked, which control refused it, what is left. */
+export function BlockCard({ b, unit = "USDC" }: { b: BlockedPayment; unit?: string }) {
+  return (
+    <div className={`block-card ${b.severity}`} role="alert">
+      <div className="block-title">Payment blocked: {b.title}</div>
+      <dl>
+        {b.requestedUsdc && (
+          <>
+            <dt>Requested</dt>
+            <dd>
+              {b.requestedUsdc} {unit}
+            </dd>
+          </>
+        )}
+        <dt>To</dt>
+        <dd>{b.recipient}</dd>
+        <dt>Stopped by</dt>
+        <dd>
+          {b.policy}
+          {b.code !== null ? <span className="mono muted"> (#{b.code})</span> : null}
+        </dd>
+        {b.allowanceLeftUsdc && (
+          <>
+            <dt>Allowance left</dt>
+            <dd>
+              {b.allowanceLeftUsdc} of {b.limitUsdc} {unit}
+            </dd>
+          </>
+        )}
+      </dl>
+      <p>{b.reason}</p>
+      <p className="no-funds">No funds were transferred. The smart account refused before any money moved.</p>
+    </div>
+  );
+}
 
 interface ChatState {
   /** Changes when a new conversation starts or the service restarts. */
@@ -186,6 +242,7 @@ export function AgentChat({ enabled }: { enabled: boolean }) {
                 </div>
               );
             case "payment":
+              if (e.block) return <BlockCard key={e.seq} b={e.block} />;
               return (
                 <div key={e.seq} className={`chat-pay ${e.status}`}>
                   {e.status === "paid" ? "PAID" : e.status.toUpperCase()} {e.priceUsdc ? `${e.priceUsdc} USDC` : ""} · {e.label}

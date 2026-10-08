@@ -149,3 +149,17 @@ button.choice:not(:disabled):hover { background: color-mix(in srgb, var(--accent
 button.small-btn { padding: 6px 10px; font-size: 12px; font-weight: 500; }
 .chat-input { display: flex; gap: 8px; }
 .chat-input input { flex: 1; min-width: 0; }
+
+/* why was this blocked? */
+.block-card { justify-self: stretch; border: 1px solid var(--danger); background: var(--danger-bg); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.block-card.medium { border-color: #c98a12; background: color-mix(in srgb, #f2b33d 14%, var(--surface)); }
+.block-title { font-weight: 700; color: var(--danger); margin-bottom: 6px; }
+.block-card.medium .block-title { color: #9a6200; }
+.block-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0 0 6px; }
+.block-card dt { color: var(--muted); }
+.block-card dd { margin: 0; }
+.block-card p { margin: 4px 0 0; }
+.block-card .no-funds { font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .block-card.medium .block-title { color: #f2b33d; }
+}
