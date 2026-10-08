@@ -21,6 +21,7 @@ import {
   explorerTx,
   fetchPaid,
   prepareSmartAccountPayment,
+  smartAccountTransfer,
   type Refusal,
   requireEnv,
   spendingLimitState,
@@ -343,6 +344,27 @@ export class AgentWallet {
     if (paid.status !== 200) return { ok: false, status: "refused", url, priceUsdc, reason: `merchant answered HTTP ${paid.status}` };
     const settle = this.http.getPaymentSettleResponse((n) => paid.headers.get(n));
     return { ok: true, status: "paid", url, priceUsdc, scheme: "exact (guardian-approved)", receipt: explorerTx(settle.transaction), data: await paid.json() };
+  }
+
+  /**
+   * Send USDC straight from the smart account to any address, signed by the
+   * agent's key under its rule. This is the raw "send money" power that drained
+   * agent wallets in 2026; here the account's policies decide, so an unlisted
+   * recipient, an over-limit amount or an expired rule is refused on-chain.
+   */
+  async transfer(to: string, amount: bigint): Promise<Purchase> {
+    const priceUsdc = stroopsToUsdc(amount);
+    // Any funded classic account can pay the network fee; it gains no authority.
+    const source = Keypair.fromSecret(process.env.AGENT_VAULT_SECRET ?? requireEnv("AGENT_SECRET"));
+    try {
+      const tx = await smartAccountTransfer({ signer: this.signer, source, to, amount });
+      return { ok: true, status: "paid", url: "", priceUsdc, payTo: to, receipt: explorerTx(tx) };
+    } catch (e) {
+      if (e instanceof PaymentRejectedError) {
+        return { ok: false, status: "blocked", url: "", priceUsdc, payTo: to, reason: `blocked by the smart account: ${e.message}`, refusal: explainRefusal(e.code) };
+      }
+      return { ok: false, status: "error", url: "", priceUsdc, payTo: to, reason: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   /** Private mode: settle what is still owed to a merchant, in one confidential transfer. */
