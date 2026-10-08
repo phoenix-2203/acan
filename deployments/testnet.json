@@ -3,7 +3,7 @@
   "note": "Public addresses of ACAN's testnet deployment, read by the demo site. Refresh with: npm run deployment:publish",
   "smartAccount": "CCV4VQTGJN6GUVNM4LN3JWOWBOOX3E7IGKJ6QUPKZVKMDNV7WEJXVYAQ",
   "agent": "GB6V5SSWLBJS6AGL7KOSW2CJD4FHHJX5CMFEL2NF2YU6ASUSMMZZIFMZ",
-  "agentRuleId": 6,
+  "agentRuleId": 12,
   "agentVault": "GA4Y7NABQIHYBQU5RW6RQL4O4FIWV47ZM52QC7VVWVSL6CZMFTQVXEZL",
   "merchants": [
     {

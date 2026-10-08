@@ -131,6 +131,19 @@ merchant A cap 0.05 USDC per period, used 0; the agent tries to pay 0.051…
 REFUSED by the smart account: RecipientCapExceeded: this merchant's own cap for the period is used up
 ```
 
+The current rule, #12, uses merchant budget policy v0.3, which adds a per-payment limit.
+The guardian drafted it in plain English in the dashboard ("$0.20 a day for 7 days, at most
+5 cents per payment, Northwind capped at 5 cents and Southgate at 2 cents") and approved it
+with the passkey. `npm run status` reads it back from the chain:
+
+```
+Agent rule id              12
+Allowance per period       0.2 USDC / 17280 ledgers
+  may pay merchant A       0 / 0.05 USDC used
+  may pay merchant B       0 / 0.02 USDC used
+  largest single payment   0.05 USDC (more needs the guardian's approval)
+```
+
 **Task budget.** `npm run agent:ai -- --budget` starts with no spending authority. The
 model priced the task from both catalogs and asked for 0.03 USDC for 10 minutes at the two
 merchants. The guardian approved it with the passkey, which created rule #7. The model then
