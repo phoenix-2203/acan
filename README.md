@@ -151,6 +151,17 @@ PAID 0.02 USDC to Northwind Data for /api/balance
 task budget left 0.005 of 0.03 USDC (rule #7 expires on its own)
 ```
 
+**Signed task receipt.** The dashboard chat bought the latest ledger for 0.01 USDC
+([`4394246d…`](https://stellar.expert/explorer/testnet/tx/4394246d34c0d491671d9c76ba78f8785c0c377054d62f6038ce0456a13aaf6a)).
+Its downloaded receipt, signed by the agent key, was then checked against testnet:
+
+```
+OK    signed by the agent key GB6V5SSWLBJS6AGL7KOSW2CJD4FHHJX5CMFEL2NF2YU6ASUSMMZZIFMZ
+OK    total spent 0.01 USDC matches its 1 payment line(s)
+OK    4394246d… 0.01 USDC from the smart account to Northwind Data
+receipt verified
+```
+
 **In the browser, no install.** On the demo site, a fresh passkey wallet gave an agent key
 5 XLM a day for two shops, with per-shop caps (3 and 2 XLM). The agent's two shop payments
 settled. A prompt-injected
