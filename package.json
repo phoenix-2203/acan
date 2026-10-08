@@ -30,6 +30,7 @@
     "agent:return": "tsx apps/agent/src/return-vault.ts",
     "ct:setup": "tsx scripts/ct-setup.ts",
     "audit": "tsx scripts/audit.ts",
+    "receipt:verify": "tsx scripts/verify-receipt.ts",
     "guardian": "tsx scripts/guardian.ts",
     "allowlist:deploy": "tsx scripts/deploy-allowlist.ts",
     "deployment:publish": "tsx scripts/publish-deployment.ts",
