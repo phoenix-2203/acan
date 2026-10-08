@@ -8,7 +8,10 @@
 //! - a **cap per recipient**: at most `cap` to each recipient per period, so a
 //!   single misbehaving or compromised merchant can only take its own slice;
 //! - a **payment-count limit**: at most `max_payments` transfers per period,
-//!   which stops runaway loops of small payments.
+//!   which stops runaway loops of small payments;
+//! - a **per-payment limit**: no single transfer above `max_per_payment`, so
+//!   anything larger needs the guardian's own approval (signed under the
+//!   guardian's rule, not the agent's).
 //!
 //! Periods are fixed windows of `period_ledgers` ledgers that restart on the
 //! first payment after a window ends. One deployment serves any number of
@@ -48,6 +51,8 @@ pub enum MerchantPolicyError {
     RecipientCapExceeded = 3406,
     /// This payment would exceed the number of payments allowed per period.
     TooManyPayments = 3407,
+    /// This single payment is larger than the per-payment limit.
+    PaymentTooLarge = 3408,
 }
 
 /// One allowed recipient. `cap` is the most it may receive per period
@@ -68,6 +73,8 @@ pub struct MerchantPolicyParams {
     pub period_ledgers: u32,
     /// Payments allowed per period; 0 means no limit.
     pub max_payments: u32,
+    /// Largest single payment (atomic units); 0 means no limit.
+    pub max_per_payment: i128,
 }
 
 /// Usage in the current period.
@@ -143,6 +150,9 @@ impl Policy for MerchantBudgetPolicy {
             Some(r) => r.cap,
             None => panic_with_error!(e, MerchantPolicyError::RecipientNotAllowed),
         };
+        if params.max_per_payment > 0 && amount > params.max_per_payment {
+            panic_with_error!(e, MerchantPolicyError::PaymentTooLarge)
+        }
 
         let key = StorageKey::State(smart_account.clone(), context_rule.id);
         let now = e.ledger().sequence();
@@ -225,7 +235,7 @@ impl MerchantBudgetPolicy {
 
 fn validate(e: &Env, p: &MerchantPolicyParams) {
     let r = &p.recipients;
-    if r.is_empty() || r.len() > MAX_RECIPIENTS || p.period_ledgers == 0 {
+    if r.is_empty() || r.len() > MAX_RECIPIENTS || p.period_ledgers == 0 || p.max_per_payment < 0 {
         panic_with_error!(e, MerchantPolicyError::InvalidParams)
     }
     for i in 0..r.len() {

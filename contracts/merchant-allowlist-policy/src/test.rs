@@ -57,7 +57,7 @@ fn params(e: &Env, recipients: &[(&Address, i128)], max_payments: u32) -> Mercha
     for (a, cap) in recipients {
         v.push_back(Recipient { address: (*a).clone(), cap: *cap });
     }
-    MerchantPolicyParams { recipients: v, period_ledgers: DAY, max_payments }
+    MerchantPolicyParams { recipients: v, period_ledgers: DAY, max_payments, max_per_payment: 0 }
 }
 
 fn call(e: &Env, token: &Address, f: Symbol, from: &Address, to: &Address, amount: i128) -> Context {
@@ -113,6 +113,24 @@ fn caps_each_recipient_separately() {
 }
 
 #[test]
+fn refuses_a_single_payment_above_the_per_payment_limit() {
+    let s = setup();
+    let mut p = params(&s.e, &[(&s.merchant, 1_000)], 0);
+    p.max_per_payment = 100;
+    s.client.install(&p, &s.rule, &s.account);
+    assert_eq!(s.pay(&s.merchant, 100), 0); // exactly at the limit
+    assert_eq!(s.pay(&s.merchant, 101), MerchantPolicyError::PaymentTooLarge as u32);
+    // A refused payment is not counted against the recipient's cap.
+    assert_eq!(s.client.get_state(&3, &s.account).spent.get(s.merchant.clone()), Some(100));
+    // An unlisted recipient is still refused as such, whatever the amount.
+    assert_eq!(s.pay(&Address::generate(&s.e), 1_000), MerchantPolicyError::RecipientNotAllowed as u32);
+    let mut negative = params(&s.e, &[(&s.merchant, 0)], 0);
+    negative.max_per_payment = -1;
+    let r = rule(&s.e, 4, ContextRuleType::CallContract(s.token.clone()));
+    assert_eq!(code(s.client.try_install(&negative, &r, &s.account)), MerchantPolicyError::InvalidParams as u32);
+}
+
+#[test]
 fn limits_payments_per_period_and_resets_after_it() {
     let s = setup();
     s.client.install(&params(&s.e, &[(&s.merchant, 0)], 3), &s.rule, &s.account);
@@ -157,7 +175,7 @@ fn rejects_non_transfer_calls_and_missing_signers() {
 #[test]
 fn install_validation_and_uninstall() {
     let s = setup();
-    let empty = MerchantPolicyParams { recipients: Vec::new(&s.e), period_ledgers: DAY, max_payments: 0 };
+    let empty = MerchantPolicyParams { recipients: Vec::new(&s.e), period_ledgers: DAY, max_payments: 0, max_per_payment: 0 };
     assert_eq!(code(s.client.try_install(&empty, &s.rule, &s.account)), MerchantPolicyError::InvalidParams as u32);
     let dup = params(&s.e, &[(&s.merchant, 0), (&s.merchant, 5)], 0);
     assert_eq!(code(s.client.try_install(&dup, &s.rule, &s.account)), MerchantPolicyError::InvalidParams as u32);
@@ -316,6 +334,7 @@ fn params_xdr_fixture() {
         recipients: vec![&e, Recipient { address: a, cap: 500_000 }, Recipient { address: b, cap: 0 }],
         period_ledgers: DAY,
         max_payments: 10,
+        max_per_payment: 250_000,
     };
     let bytes = p.to_xdr(&e);
     let mut v = std::vec::Vec::new();
