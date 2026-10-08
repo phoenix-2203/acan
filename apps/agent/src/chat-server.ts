@@ -6,6 +6,9 @@
  *   POST /chat/message       {text}               the user types
  *   POST /chat/choose        {optionsId, optionId} the user taps an option
  *   POST /chat/reset         start a new conversation
+ *   POST /policy/draft       {text}  turn "give my agent $5 for 24 hours" into a
+ *                            reviewable allowance (the dashboard shows it; the
+ *                            guardian's passkey is what creates it)
  *
  * The agent's key and the model's API key stay in this process; the browser
  * only sees the conversation. Payments are authorized on-chain under the
@@ -17,6 +20,7 @@ import express from "express";
 import { loadEnv } from "@acan/core";
 import { ChatEngine } from "./chat-engine.js";
 import { merchantPins, merchantUrls } from "./merchants.js";
+import { draftPolicy, type MerchantInfo } from "./policy-draft.js";
 import { AgentWallet, type Mode } from "./wallet.js";
 
 loadEnv();
@@ -87,6 +91,29 @@ app.post("/chat/reset", (_req, res) => {
   engine = newEngine();
   resets++;
   res.json({ ok: true, generation: generation() });
+});
+
+app.post("/policy/draft", async (req, res) => {
+  const text = req.body?.text;
+  if (typeof text !== "string" || !text.trim()) return void res.status(400).json({ error: "body must be {text}" });
+  try {
+    const pins = merchantPins();
+    const merchants: MerchantInfo[] = [];
+    for (const url of merchantUrls()) {
+      try {
+        const c = await (await fetch(url)).json();
+        merchants.push({ url, name: String(c.name ?? url), payTo: pins.get(url) ?? String(c.payTo), products: c.products ?? [] });
+      } catch {
+        /* unreachable merchant: not offered */
+      }
+    }
+    if (merchants.length === 0) return void res.status(503).json({ error: "no merchant is reachable (npm run merchant / merchant:b)" });
+    const vault = process.env.AGENT_VAULT_ADDRESS ? { address: process.env.AGENT_VAULT_ADDRESS, name: "Agent's private vault" } : undefined;
+    const draft = await draftPolicy(text, merchants, { vault });
+    res.json({ draft, agentKey: wallet.signer.agentAddress });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+  }
 });
 
 app.listen(PORT, "127.0.0.1", (err?: Error) => {
