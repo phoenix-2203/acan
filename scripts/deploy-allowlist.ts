@@ -26,8 +26,9 @@ if (!existsSync(WASM)) throw new Error(`build did not produce ${WASM}`);
 const out = run(["contract", "deploy", "--wasm", WASM, "--source", identity, "--network", "testnet"], true);
 const id = out.split(/\s+/).reverse().find((t) => StrKey.isValidContract(t));
 if (!id) throw new Error(`could not find the contract id in the deploy output:\n${out}`);
-saveEnv({ ALLOWLIST_POLICY: id });
+// v0.3: allowlist, per-recipient caps, payment count, per-payment limit.
+saveEnv({ ALLOWLIST_POLICY: id, ALLOWLIST_POLICY_VERSION: "0.3" });
 console.log(`\nALLOWLIST_POLICY=${id} saved to .env`);
 console.log(`Explorer: ${explorerAccount(id)}`);
 console.log("Publishing the new address for the demo site (deployments/testnet.json)…");
-execFileSync("npx", ["tsx", "scripts/publish-deployment.ts", "--policy-version", "0.2"], { stdio: "inherit" });
+execFileSync("npx", ["tsx", "scripts/publish-deployment.ts", "--policy-version", "0.3"], { stdio: "inherit" });

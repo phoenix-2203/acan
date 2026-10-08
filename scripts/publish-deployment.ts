@@ -44,7 +44,10 @@ const next = {
   merchantPolicy: policy
     ? {
         address: policy,
-        version: versionArg ?? (policy === previous.merchantPolicy?.address ? previous.merchantPolicy.version : "0.2"),
+        version:
+          versionArg ??
+          process.env.ALLOWLIST_POLICY_VERSION ??
+          (policy === previous.merchantPolicy?.address ? previous.merchantPolicy.version : "0.3"),
       }
     : undefined,
 };

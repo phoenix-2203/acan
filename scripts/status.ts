@@ -39,6 +39,7 @@ async function main() {
         line(`  may pay ${label}`, r.cap > 0n ? `${stroopsToUsdc(used)} / ${stroopsToUsdc(r.cap)} USDC used` : `no cap (${stroopsToUsdc(used)} USDC used)`);
       }
       if (params.max_payments > 0) line("  payments this period", `${usage.payments} / ${params.max_payments}`);
+      if (params.max_per_payment > 0n) line("  largest single payment", `${stroopsToUsdc(params.max_per_payment)} USDC (more needs the guardian's approval)`);
     } catch {
       line("Merchant budget policy", "not installed on this rule");
     }
