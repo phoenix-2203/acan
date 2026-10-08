@@ -225,6 +225,9 @@ async function runTool(call: ToolCall): Promise<{ output: string; done?: string 
       } else {
         if (r.status === "blocked") blocked.add(url);
         log(`   ${bold(r.status.toUpperCase())} ${path} at ${name}: ${r.reason}`);
+        if (r.refusal) {
+          log(`     stopped by: ${r.refusal.policy} (${r.refusal.title}). ${r.refusal.reason} No funds were transferred.`);
+        }
       }
       return { output: JSON.stringify(
           r.ok

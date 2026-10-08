@@ -17,9 +17,11 @@ import {
   TESTNET,
   TabClientScheme,
   attachPaymentIdentifier,
+  explainRefusal,
   explorerTx,
   fetchPaid,
   prepareSmartAccountPayment,
+  type Refusal,
   requireEnv,
   spendingLimitState,
   stroopsToUsdc,
@@ -39,6 +41,10 @@ export interface Purchase {
   receipt?: string;
   data?: unknown;
   reason?: string;
+  /** Recipient the payment was for (the merchant's payTo). */
+  payTo?: string;
+  /** When the smart account refused: which control, and why, in plain words. */
+  refusal?: Refusal;
 }
 
 export class AgentWallet {
@@ -159,7 +165,16 @@ export class AgentWallet {
     } catch (err) {
       for (let e: any = err; e; e = e.cause) {
         if (e instanceof PaymentRejectedError) {
-          return { ok: false, status: "blocked", url, priceUsdc, scheme, reason: `blocked by the smart account: ${e.message}` };
+          return {
+            ok: false,
+            status: "blocked",
+            url,
+            priceUsdc,
+            scheme,
+            payTo: req.payTo,
+            reason: `blocked by the smart account: ${e.message}`,
+            refusal: explainRefusal(e.code),
+          };
         }
       }
       return { ok: false, status: "error", url, priceUsdc, scheme, reason: err instanceof Error ? err.message : String(err) };

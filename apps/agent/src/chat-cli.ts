@@ -42,7 +42,13 @@ function show(e: ChatEvent): void {
       break;
     case "payment":
       if (e.status === "paid") console.log(green(`  PAID ${e.priceUsdc} USDC for ${e.label}  ${dim(e.receipt ?? "")}`));
-      else console.log(red(`  ${e.status.toUpperCase()} ${e.label}: ${e.reason ?? ""}`));
+      else if (e.block) {
+        console.log(red(`  PAYMENT BLOCKED: ${e.block.title}`));
+        console.log(`    requested   ${e.block.requestedUsdc ?? "?"} USDC to ${e.block.recipient}`);
+        console.log(`    stopped by  ${e.block.policy}${e.block.code !== null ? ` (#${e.block.code})` : ""}`);
+        if (e.block.allowanceLeftUsdc) console.log(`    allowance   ${e.block.allowanceLeftUsdc} of ${e.block.limitUsdc} USDC left`);
+        console.log(`    ${e.block.reason} No funds were transferred.`);
+      } else console.log(red(`  ${e.status.toUpperCase()} ${e.label}: ${e.reason ?? ""}`));
       break;
     case "budget":
       console.log(dim(`  allowance left ${e.remainingUsdc} of ${e.limitUsdc} USDC`));
