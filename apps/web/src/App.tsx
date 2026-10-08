@@ -33,6 +33,7 @@ import {
   setFrozen,
 } from "./guardian";
 import { auditCsv, auditJson, download } from "./audit-export";
+import { AgentChat } from "./AgentChat";
 
 type Busy =
   | null
@@ -560,6 +561,18 @@ export default function App() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className={`card ${account ? "" : "disabled"}`}>
+        <div className="step">AI</div>
+        <div className="body">
+          <h2>Talk to your agent</h2>
+          <p className="muted">
+            Ask in plain words. The agent compares the merchants and offers you choices. Nothing is paid until you tap one, and
+            the smart account still checks every payment against the allowance above.
+          </p>
+          <AgentChat enabled={Boolean(account)} />
         </div>
       </section>
 
