@@ -287,6 +287,15 @@ goes through the smart account, so the on-chain limit binds the model whatever
 it decides; the model only chooses *what* to buy. `--private` makes it pay with
 tab vouchers and settle confidentially.
 
+**Talk to it.** `npm run agent:chat` is a conversation in the terminal, and
+`npm run agent:chat:server` puts the same conversation in the dashboard ("Talk to your
+agent"). You ask in plain words, or tap a suggestion. The model reads the catalogs and
+answers with choices ("Southgate: latest ledger · 0.005 USDC", "Northwind … 0.01 USDC",
+"Cancel"). Nothing is paid until you pick one, and the price on each choice comes from the
+merchant's catalog, not from the model. If the allowance refuses a payment, the chat offers
+to ask the guardian for a one-off passkey approval. `AGENT_AUTOPILOT=1` lets the model buy
+without asking, still inside the on-chain limits.
+
 Providers (no SDKs, plain HTTPS): Groq (`GROQ_API_KEY`, default model
 `openai/gpt-oss-120b`), Claude (`ANTHROPIC_API_KEY`) or a local Ollama model
 (`OLLAMA_MODEL`).
