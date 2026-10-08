@@ -75,19 +75,25 @@ function expireOld() {
   }
 }
 
-/** Addresses and contracts the dashboard offers when authorizing an agent. */
+/**
+ * Addresses and contracts the dashboard offers when authorizing an agent.
+ * Read from .env on every request, so a redeployed policy contract is picked
+ * up without restarting this service (a stale address here would install the
+ * old contract on the next rule).
+ */
 app.get("/config", (_req, res) => {
+  const env = { ...process.env, ...loadEnv() };
   const recipients = [
-    process.env.MERCHANT_ADDRESS && { address: process.env.MERCHANT_ADDRESS, label: "Northwind Data (merchant A)" },
-    process.env.MERCHANT_B_ADDRESS && { address: process.env.MERCHANT_B_ADDRESS, label: "Southgate Data (merchant B)" },
-    process.env.AGENT_VAULT_ADDRESS && { address: process.env.AGENT_VAULT_ADDRESS, label: "Agent's private vault (top-ups)" },
+    env.MERCHANT_ADDRESS && { address: env.MERCHANT_ADDRESS, label: "Northwind Data (merchant A)" },
+    env.MERCHANT_B_ADDRESS && { address: env.MERCHANT_B_ADDRESS, label: "Southgate Data (merchant B)" },
+    env.AGENT_VAULT_ADDRESS && { address: env.AGENT_VAULT_ADDRESS, label: "Agent's private vault (top-ups)" },
   ].filter(Boolean);
   res.json({
     frozen,
-    allowlistPolicy: process.env.ALLOWLIST_POLICY || null,
+    allowlistPolicy: env.ALLOWLIST_POLICY || null,
     // v0.3 adds the per-payment limit; set by npm run allowlist:deploy.
-    allowlistPolicyVersion: process.env.ALLOWLIST_POLICY_VERSION || "0.2",
-    agentAddress: process.env.AGENT_ADDRESS || null,
+    allowlistPolicyVersion: env.ALLOWLIST_POLICY_VERSION || "0.2",
+    agentAddress: env.AGENT_ADDRESS || null,
     recipients,
   });
 });
