@@ -42,7 +42,7 @@ export async function smartAccountTransfer(opts: {
     parseResultXdr: (r) => r,
   });
   if (rpc.Api.isSimulationError(tx.simulation!)) {
-    throw new PaymentRejectedError(describeSimulationError(tx.simulation.error));
+    throw new PaymentRejectedError(describeSimulationError(tx.simulation.error), tx.simulation.error);
   }
 
   const latest = await new rpc.Server(rpcUrl).getLatestLedger();
@@ -61,7 +61,7 @@ export async function smartAccountTransfer(opts: {
   // Enforcing simulation: runs __check_auth and the spending-limit policy.
   await tx.simulate();
   if (rpc.Api.isSimulationError(tx.simulation!)) {
-    throw new PaymentRejectedError(describeSimulationError(tx.simulation.error));
+    throw new PaymentRejectedError(describeSimulationError(tx.simulation.error), tx.simulation.error);
   }
 
   const sent = await tx.signAndSend({
