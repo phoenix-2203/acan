@@ -1,0 +1,12 @@
+{
+  "name": "@acan/relay",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "AI relay for the demo site: holds the Groq key, forwards visitors' chats with a fixed prompt and tools, rate-limited. No dependencies.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

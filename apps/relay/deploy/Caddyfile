@@ -1,0 +1,5 @@
+# Caddy gets and renews the HTTPS certificate on its own.
+# Replace the name below with your DuckDNS name.
+acan-ai.duckdns.org {
+	reverse_proxy 127.0.0.1:8787
+}
