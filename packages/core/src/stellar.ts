@@ -151,6 +151,8 @@ export interface MerchantPolicyView {
   recipients: { address: string; cap: bigint }[];
   period_ledgers: number;
   max_payments: number;
+  /** Largest single payment (atomic units); 0n = no limit or a v0.2 contract. */
+  max_per_payment: bigint;
 }
 
 export interface MerchantPolicyUsage {
@@ -178,6 +180,7 @@ export async function merchantPolicyState(
       recipients: (params.recipients ?? []).map((r: any) => ({ address: String(r.address), cap: BigInt(r.cap) })),
       period_ledgers: Number(params.period_ledgers),
       max_payments: Number(params.max_payments),
+      max_per_payment: BigInt(params.max_per_payment ?? 0),
     },
     usage: { window_start: Number(state.window_start), payments: Number(state.payments), spent },
   };

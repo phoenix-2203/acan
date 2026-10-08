@@ -25,6 +25,7 @@ export const KNOWN_CODES: Record<number, string> = {
   3402: "NotAllowed: the merchant budget policy only allows token transfers",
   3406: "RecipientCapExceeded: this merchant's own cap for the period is used up",
   3407: "TooManyPayments: the payment-count limit for the period is reached",
+  3408: "PaymentTooLarge: this single payment is above the per-payment limit",
   3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
   3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
 };
