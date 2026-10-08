@@ -13,3 +13,6 @@ vendor/ctd-demo/packages/sdk/package-lock.json
 vendor/bb-crs/
 vendor/ctd/
 test_snapshots/
+
+# demo video recordings (large; never committed)
+video/
