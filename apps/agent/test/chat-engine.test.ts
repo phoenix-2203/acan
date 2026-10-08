@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Chat, Turn } from "../src/llm.js";
 import { ChatEngine, type ChatWallet } from "../src/chat-engine.js";
 import type { Purchase } from "../src/wallet.js";
+import { explainRefusal } from "@acan/core";
 
 const A = "http://localhost:4021";
 const B = "http://localhost:4022";
@@ -40,7 +41,7 @@ function wallet(outcome: Purchase["status"] = "paid") {
       calls.push({ kind: "buy", url, pin });
       return outcome === "paid"
         ? { ok: true, status: "paid", url, priceUsdc: "0.005", receipt: "tx1", data: { sequence: 42 } }
-        : { ok: false, status: outcome, url, priceUsdc: "0.005", reason: "SpendingLimitExceeded" };
+        : { ok: false, status: outcome, url, priceUsdc: "0.005", reason: "PaymentTooLarge", refusal: explainRefusal(3408) };
     },
     async requestApproval(url, _reason, _t, pin) {
       calls.push({ kind: "approve", url, pin });
@@ -106,6 +107,19 @@ test("a refused payment is offered to the guardian for a passkey approval", asyn
   const e = new ChatEngine({ wallet: w, merchants: [A, B], pins: new Map(), chatFactory: () => s.chat, fetchImpl: fakeFetch });
   await e.send("ledger");
   await e.choose(e.pendingOptions!.id, e.pendingOptions!.options[0].id);
+  const blocked = e.events.find((x) => x.type === "payment") as any;
+  assert.deepEqual(blocked.block, {
+    code: 3408,
+    title: "Payment too large",
+    policy: "Per-payment limit",
+    reason: "This single payment is above the largest amount the agent may pay on its own.",
+    severity: "medium",
+    requestedUsdc: "0.005",
+    recipient: "Southgate Data",
+    allowanceLeftUsdc: "0.195",
+    limitUsdc: "0.2",
+    noFundsMoved: true,
+  });
   const approval = e.pendingOptions!;
   assert.equal(approval.options[0].action.kind, "approve");
   await e.choose(approval.id, approval.options[0].id);

@@ -48,11 +48,28 @@ export type ChatEvent = { seq: number; at: string } & (
       priceUsdc?: string;
       receipt?: string;
       reason?: string;
+      /** Set when the smart account refused: everything a person needs to see why. */
+      block?: BlockedPayment;
     }
   | { type: "budget"; limitUsdc: string; spentUsdc: string; remainingUsdc: string }
   | { type: "error"; text: string }
 );
 type NewEvent = ChatEvent extends infer E ? (E extends ChatEvent ? Omit<E, "seq" | "at"> : never) : never;
+
+/** "Why was this blocked?": what was asked, what refused it, what is left. */
+export interface BlockedPayment {
+  title: string;
+  policy: string;
+  reason: string;
+  severity: "medium" | "high";
+  code: number | null;
+  requestedUsdc?: string;
+  recipient: string;
+  allowanceLeftUsdc?: string;
+  limitUsdc?: string;
+  /** Always true: a refused authorization moves nothing. */
+  noFundsMoved: true;
+}
 
 export interface ChatEngineOptions {
   wallet: ChatWallet;
@@ -198,17 +215,23 @@ export class ChatEngine {
         a.kind === "buy"
           ? await this.opts.wallet.buy(a.url, this.pinFor(a.merchant))
           : await this.opts.wallet.requestApproval(a.url, a.reason, undefined, this.pinFor(a.merchant));
-      this.emitPayment(r, option.label);
+      await this.emitPayment(r, option.label, a.merchantName ?? a.merchant);
       if (r.status === "blocked" && a.kind === "buy") {
         // The engine (not the model) offers the passkey route for a refused purchase.
-        this.offer("The allowance refused this payment. Ask the guardian to approve this one payment with the passkey?", [
-          {
-            label: "Ask for approval",
-            detail: a.priceUsdc ? `${a.priceUsdc} USDC` : undefined,
-            action: { kind: "approve", merchant: a.merchant, url: a.url, reason: `User asked for ${option.label}`, priceUsdc: a.priceUsdc, merchantName: a.merchantName },
-          },
-          { label: "Cancel", action: { kind: "say", text: "Cancel that purchase." } },
-        ]);
+        const high = r.refusal?.severity === "high";
+        this.offer(
+          high
+            ? "The smart account refused this payment. You can still ask the guardian, who will see the warning before deciding."
+            : "This is over the agent's own limits. Ask the guardian to approve this one payment with the passkey?",
+          [
+            {
+              label: "Ask for approval",
+              detail: a.priceUsdc ? `${a.priceUsdc} USDC` : undefined,
+              action: { kind: "approve", merchant: a.merchant, url: a.url, reason: `User asked for ${option.label}`, priceUsdc: a.priceUsdc, merchantName: a.merchantName },
+            },
+            { label: "Cancel", action: { kind: "say", text: "Cancel that purchase." } },
+          ],
+        );
         return;
       }
       this.chat.say(
@@ -313,7 +336,7 @@ export class ChatEngine {
         const p = purchaseUrl(this.opts.merchants, call.input.merchant, call.input.path, call.input.query);
         if (!p.ok) return { output: JSON.stringify({ error: p.error }) };
         const r = await this.opts.wallet.buy(p.url, this.pinFor(p.merchant));
-        this.emitPayment(r, `${this.catalogs.get(p.merchant)?.name ?? p.merchant} ${p.path}`);
+        await this.emitPayment(r, `${this.catalogs.get(p.merchant)?.name ?? p.merchant} ${p.path}`, this.catalogs.get(p.merchant)?.name ?? p.merchant);
         return { output: JSON.stringify(r.ok ? { paidUsdc: r.priceUsdc, untrustedData: r.data } : { status: r.status, reason: r.reason }) };
       }
       default:
@@ -337,8 +360,20 @@ export class ChatEngine {
     return this.opts.pins.get(merchant) ?? this.catalogs.get(merchant)?.payTo;
   }
 
-  private emitPayment(r: Purchase, label: string): void {
-    this.emit({ type: "payment", status: r.status, label, priceUsdc: r.priceUsdc, receipt: r.receipt, reason: r.reason });
+  private async emitPayment(r: Purchase, label: string, recipient: string): Promise<void> {
+    let block: BlockedPayment | undefined;
+    if (r.status === "blocked" && r.refusal) {
+      const a = await this.opts.wallet.allowance().catch(() => null);
+      block = {
+        ...r.refusal,
+        requestedUsdc: r.priceUsdc,
+        recipient,
+        allowanceLeftUsdc: a?.remainingUsdc,
+        limitUsdc: a?.limitUsdc,
+        noFundsMoved: true,
+      };
+    }
+    this.emit({ type: "payment", status: r.status, label, priceUsdc: r.priceUsdc, receipt: r.receipt, reason: r.reason, block });
   }
 
   private async reportBudget(): Promise<void> {
