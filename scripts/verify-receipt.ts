@@ -9,8 +9,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { StrKey, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
-import { ASSETS, TESTNET, addUsdc, stroopsToUsdc, verifyReceiptSignature, type SignedReceipt } from "@acan/core";
+import { rpc } from "@stellar/stellar-sdk";
+import { TESTNET, checkPaymentOnChain, checkReceiptOffline, parseSignedReceipt } from "@acan/core";
 
 /** The most recent receipt file: downloaded from the dashboard, or written by the CLI agent. */
 function newestReceipt(): string | undefined {
@@ -33,7 +33,7 @@ if (!file) {
   process.exit(2);
 }
 console.log(`checking ${file}\n`);
-const signed = JSON.parse(readFileSync(file, "utf8")) as SignedReceipt;
+const signed = parseSignedReceipt(readFileSync(file, "utf8"));
 const r = signed.receipt;
 let failures = 0;
 const ok = (good: boolean, text: string) => {
@@ -41,53 +41,13 @@ const ok = (good: boolean, text: string) => {
   if (!good) failures++;
 };
 
-ok(verifyReceiptSignature(signed), `signed by the agent key ${signed.signer}`);
-ok(addUsdc(r.payments.map((p) => p.amountUsdc)) === r.totals.spentUsdc, `total spent ${r.totals.spentUsdc} USDC matches its ${r.payments.length} payment line(s)`);
+for (const c of checkReceiptOffline(signed)) ok(c.status === "ok", c.text);
 
 const server = new rpc.Server(TESTNET.rpcUrl);
-
-/** USDC transfers in a transaction's events (Protocol 23+ meta v4, or v3). */
-function transfers(meta: xdr.TransactionMeta): { from: string; to: string; amount: bigint }[] {
-  const out: { from: string; to: string; amount: bigint }[] = [];
-  let events: xdr.ContractEvent[] = [];
-  try {
-    const v = meta.switch();
-    if (v === 4) events = meta.v4().operations().flatMap((o) => o.events());
-    else if (v === 3) events = meta.v3().sorobanMeta()?.events() ?? [];
-  } catch {
-    return out;
-  }
-  for (const e of events) {
-    try {
-      const id = e.contractId();
-      if (!id || StrKey.encodeContract(Buffer.from(id as unknown as Uint8Array)) !== ASSETS.usdc.sac) continue;
-      const body = e.body().v0();
-      const topics = body.topics().map((t) => scValToNative(t));
-      if (topics[0] !== "transfer") continue;
-      const v = scValToNative(body.data());
-      out.push({ from: String(topics[1]), to: String(topics[2]), amount: BigInt(typeof v === "object" && v && "amount" in v ? v.amount : v) });
-    } catch {
-      /* not a token transfer event */
-    }
-  }
-  return out;
-}
-
-for (const p of r.payments) {
-  if (!p.tx) {
-    console.log(`--    ${p.amountUsdc} USDC to ${p.merchant} (${p.item}): ${p.scheme} voucher, settled confidentially later; not checkable per request`);
-    continue;
-  }
-  const t = await server.getTransaction(p.tx);
-  if (t.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-    ok(false, `${p.tx.slice(0, 8)}… ${t.status === rpc.Api.GetTransactionStatus.NOT_FOUND ? "not found (older than the RPC's retention window, or wrong network)" : "did not succeed"}`);
-    continue;
-  }
-  const moved = transfers(t.resultMetaXdr).find((x) => x.from === r.smartAccount && (!p.address || x.to === p.address));
-  ok(
-    Boolean(moved && stroopsToUsdc(moved.amount) === p.amountUsdc),
-    `${p.tx.slice(0, 8)}… ${p.amountUsdc} USDC from the smart account to ${p.merchant}${moved ? "" : " (no matching transfer event)"}`,
-  );
+for (const [i, p] of r.payments.entries()) {
+  const c = await checkPaymentOnChain(server, r.smartAccount, p, i);
+  if (c.status === "skip") console.log(`--    ${c.text}`);
+  else ok(c.status === "ok", c.text);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : "\nreceipt verified");
