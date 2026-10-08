@@ -121,6 +121,41 @@ APPROVED with the guardian's passkey
 PAID 0.02 USDC to Northwind Data for /api/balance
 ```
 
+**Per-merchant caps** (merchant budget policy v0.2, rule #6: 0.20 USDC/day overall,
+Northwind at most 0.05, Southgate at most 0.02, 20 payments a day). `npm run demo:caps`
+has the agent pay Northwind just over its cap. The overall allowance has room, but the
+merchant's own cap refuses it:
+
+```
+merchant A cap 0.05 USDC per period, used 0; the agent tries to pay 0.051…
+REFUSED by the smart account: RecipientCapExceeded: this merchant's own cap for the period is used up
+```
+
+**Task budget.** `npm run agent:ai -- --budget` starts with no spending authority. The
+model priced the task from both catalogs and asked for 0.03 USDC for 10 minutes at the two
+merchants. The guardian approved it with the passkey, which created rule #7. The model then
+bought each item from the cheaper merchant:
+[`00047ab1…`](https://stellar.expert/explorer/testnet/tx/00047ab14c4407b5555820975480b64d55851a0a939d7c0e33b0dfed3c20d0cc)
+(0.005 USDC to Southgate) and
+[`5e39e045…`](https://stellar.expert/explorer/testnet/tx/5e39e04507370bccd8382807135a7fb91b6e0e8e429df861ac4e0e65a5eb8748)
+(0.02 USDC to Northwind). One malformed tool call, a mistyped merchant URL, was rejected
+before anything was signed. Rule #7 expires on its own. `npm run agent:return` then sent
+the 0.08 USDC left in the private vault back to the smart account
+([`ab1795bb…`](https://stellar.expert/explorer/testnet/tx/ab1795bba99be1ae69c8fe3f7545dc5b35d2839a2f77feae3b8dfd4f0c152970)).
+
+```
+BUDGET APPROVED with the guardian's passkey: rule #7, 0.03 USDC, expires in 10 min, only Southgate Data, Northwind Data
+PAID 0.005 USDC to Southgate Data for /api/ledger
+REJECTED unknown merchant "http://localhost:401?" (not paid)
+PAID 0.02 USDC to Northwind Data for /api/balance
+task budget left 0.005 of 0.03 USDC (rule #7 expires on its own)
+```
+
+**In the browser, no install.** On the demo site, a fresh passkey wallet gave an agent key
+5 XLM a day for two shops. The agent's two shop payments settled. A 10 XLM payment was
+refused by the smart account (`SpendingLimitExceeded`), and so was every payment after the
+guardian revoked the rule.
+
 ---
 
 ## How it works
