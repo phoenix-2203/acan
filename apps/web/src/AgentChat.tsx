@@ -72,7 +72,7 @@ export function BlockCard({ b, unit = "USDC" }: { b: BlockedPayment; unit?: stri
         )}
       </dl>
       <p>{b.reason}</p>
-      <p className="no-funds">No funds were transferred. The smart account refused before any money moved.</p>
+      <p className="no-funds">No funds were transferred: the payment was refused before any money moved.</p>
     </div>
   );
 }

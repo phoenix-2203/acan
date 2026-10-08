@@ -257,7 +257,7 @@ export default function App() {
   /** Emergency stop: delete every live agent rule, one passkey approval each. */
   const revokeAll = () =>
     run("revoke-all", async () => {
-      const live = grants.filter((g) => allowances[g.ruleId] !== null && (onChainIds?.has(g.ruleId) ?? true));
+      const live = grants.filter(isLive);
       let done = 0;
       for (const g of live) {
         setNotice(`Emergency stop: revoking rule #${g.ruleId} (${done + 1} of ${live.length})…`);
@@ -268,7 +268,11 @@ export default function App() {
       await refresh();
     });
 
-  const liveCount = grants.filter((g) => allowances[g.ruleId] !== null && (onChainIds?.has(g.ruleId) ?? true)).length;
+  const isLive = (g: AgentGrant) =>
+    allowances[g.ruleId] !== null &&
+    (onChainIds?.has(g.ruleId) ?? true) &&
+    !(g.validUntil !== undefined && ledger !== null && ledger > g.validUntil);
+  const liveCount = grants.filter(isLive).length;
 
   const toggleFreeze = () =>
     run("freeze", async () => {
