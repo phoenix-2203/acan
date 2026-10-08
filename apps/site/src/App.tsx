@@ -162,6 +162,23 @@ export default function App() {
                   </td>
                 </tr>
                 <tr>
+                  <td>Task budget: the agent asks for 0.03 USDC for 10 minutes, the guardian approves with a passkey, and the agent buys within it</td>
+                  <td>
+                    {tx("00047ab14c4407b5555820975480b64d55851a0a939d7c0e33b0dfed3c20d0cc")}{" "}
+                    {tx("5e39e04507370bccd8382807135a7fb91b6e0e8e429df861ac4e0e65a5eb8748")}
+                  </td>
+                </tr>
+                <tr>
+                  <td>Unused private-vault funds returned to the guardian's smart account</td>
+                  <td>{tx("ab1795bba99be1ae69c8fe3f7545dc5b35d2839a2f77feae3b8dfd4f0c152970")}</td>
+                </tr>
+                <tr>
+                  <td>Paying a merchant beyond its own cap is refused even though the overall allowance has room (RecipientCapExceeded)</td>
+                  <td>
+                    <code>npm run demo:caps</code>
+                  </td>
+                </tr>
+                <tr>
                   <td>Paying an address that is not on the allowlist is refused during authorization (RecipientNotAllowed)</td>
                   <td>
                     <code>npm run demo:allowlist</code>
