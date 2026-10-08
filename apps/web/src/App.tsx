@@ -94,6 +94,8 @@ export default function App() {
   /** Per-recipient cap in USDC as typed ("" = no cap). */
   const [caps, setCaps] = useState<Record<string, string>>({});
   const [maxPayments, setMaxPayments] = useState("");
+  /** Largest single payment in USDC as typed ("" = no limit). Needs policy v0.3. */
+  const [maxPerPayment, setMaxPerPayment] = useState("");
   const [useAllowlist, setUseAllowlist] = useState(true);
   const [audit, setAudit] = useState<AuditReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -234,6 +236,8 @@ export default function App() {
                 .filter((r) => allowOnly[r.address])
                 .map((r) => ({ address: r.address, cap: caps[r.address]?.trim() ? usdcToStroops(caps[r.address].trim()) : 0n })),
               maxPayments: maxPayments.trim() ? Number(maxPayments.trim()) : 0,
+              maxPerPayment: maxPerPayment.trim() ? usdcToStroops(maxPerPayment.trim()) : 0n,
+              version: config.allowlistPolicyVersion ?? "0.2",
             }
           : undefined;
       const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period, expiry || undefined, allowlist);
@@ -309,6 +313,7 @@ export default function App() {
               policy: config.allowlistPolicy,
               recipients: b.recipients.map((r) => ({ address: r.address, cap: 0n })),
               maxPayments: 0,
+              version: config.allowlistPolicyVersion ?? "0.2",
             }
           : undefined,
         b.task || b.reason,
@@ -484,6 +489,18 @@ export default function App() {
                       onChange={(e) => setMaxPayments(e.target.value.replace(/[^0-9]/g, ""))}
                     />
                   </label>
+                  {config.allowlistPolicyVersion === "0.3" && (
+                    <label className="inline">
+                      Largest single payment (USDC)
+                      <input
+                        className="cap"
+                        placeholder="no limit"
+                        inputMode="decimal"
+                        value={maxPerPayment}
+                        onChange={(e) => setMaxPerPayment(e.target.value)}
+                      />
+                    </label>
+                  )}
                 </>
               )}
             </fieldset>
@@ -539,6 +556,7 @@ export default function App() {
                       })
                       .join(", ")}
                     {g.maxPayments ? `; at most ${g.maxPayments} payments ${periodLabel(g.periodLedgers)}` : ""}
+                    {g.maxPerPayment && g.maxPerPayment !== "0" ? `; at most ${fmt(BigInt(g.maxPerPayment))} USDC per payment` : ""}
                   </div>
                 )}
                 <div className="meter" aria-label={`${pct}% of allowance used`}>

@@ -85,6 +85,8 @@ app.get("/config", (_req, res) => {
   res.json({
     frozen,
     allowlistPolicy: process.env.ALLOWLIST_POLICY || null,
+    // v0.3 adds the per-payment limit; set by npm run allowlist:deploy.
+    allowlistPolicyVersion: process.env.ALLOWLIST_POLICY_VERSION || "0.2",
     agentAddress: process.env.AGENT_ADDRESS || null,
     recipients,
   });

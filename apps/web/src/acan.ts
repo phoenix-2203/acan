@@ -37,6 +37,8 @@ export interface AgentGrant {
   caps?: string[];
   /** Payments allowed per period by the merchant budget policy (0 = no limit). */
   maxPayments?: number;
+  /** Largest single payment in atomic units as a string ("0" = no limit). */
+  maxPerPayment?: string;
   /** Set when the rule is a task budget the agent asked for. */
   task?: string;
   /** Found on-chain but not in this browser's records (e.g. storage was cleared). */
@@ -80,7 +82,14 @@ export async function grantAgent(
   /** Expire the allowance this many ledgers from now (undefined = never). */
   expiresInLedgers?: number,
   /** Only allow transfers to these recipients, each with an optional cap (ACAN merchant budget policy). */
-  allowlist?: { policy: string; recipients: RecipientCap[]; maxPayments: number },
+  allowlist?: {
+    policy: string;
+    recipients: RecipientCap[];
+    maxPayments: number;
+    /** Largest single payment, atomic units (0n = none). Needs policy v0.3. */
+    maxPerPayment?: bigint;
+    version?: "0.2" | "0.3";
+  },
   /** Label the rule as a task budget. */
   task?: string,
 ): Promise<AgentGrant> {
@@ -105,6 +114,8 @@ export async function grantAgent(
         recipients: allowlist.recipients,
         periodLedgers,
         maxPayments: allowlist.maxPayments,
+        maxPerPayment: allowlist.maxPerPayment,
+        version: allowlist.version ?? "0.2",
       }),
     );
   }
@@ -136,6 +147,7 @@ export async function grantAgent(
     recipients: allowlist?.recipients.map((r) => r.address),
     caps: allowlist?.recipients.map((r) => r.cap.toString()),
     maxPayments: allowlist?.maxPayments,
+    maxPerPayment: allowlist?.maxPerPayment ? allowlist.maxPerPayment.toString() : undefined,
     task,
     createdAt: new Date().toISOString(),
   };

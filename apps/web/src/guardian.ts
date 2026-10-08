@@ -87,6 +87,8 @@ export interface GuardianConfig {
   /** Agent requests are refused while true (older guardian services omit it). */
   frozen?: boolean;
   allowlistPolicy: string | null;
+  /** "0.2" or "0.3" (per-payment limit); older guardian services omit it (= "0.2"). */
+  allowlistPolicyVersion?: "0.2" | "0.3";
   agentAddress: string | null;
   recipients: { address: string; label: string }[];
 }
