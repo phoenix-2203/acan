@@ -1,6 +1,6 @@
 # ACAN demo film
 
-A 2:50 technical product film for the hackathon submission, built from ACAN's real interface and verified testnet results.
+A 2:35 product film for the hackathon submission (v2), built from ACAN's real interface and verified testnet results. It opens with the May 2026 Grok wallet incident, retold in recreated text with its sources on screen. v1 (2:50) is kept as `renderer/film-v1.html`, `STORYBOARD-v1.md` and `VOICEOVER-v1.md`.
 
 | File | What it is |
 |---|---|
@@ -14,7 +14,23 @@ A 2:50 technical product film for the hackathon submission, built from ACAN's re
 | `renders/` | Output (not committed): MP4s, stills, audio |
 | `recordings/` | Your own screen recordings (not committed) |
 
-## How the UI captures are made
+## How the v2 captures are made
+
+`renderer/capture-v2.mjs` drives the real site and dashboard through their film harnesses (`harness/site/harness-film.*`, `harness/web/harness-film.html`; copy them into `apps/site` and `apps/web` first). The co-signer, the plan runner, request signing and the receipt's offline checks run for real in the page; the planner answers with the example plans from its own system prompt; the chain answers with the outcomes observed on testnet on 9 Oct 2026. Details are in `FACTS.md`, "Film v2".
+
+```sh
+cp video/renderer/harness/site/harness-film.html apps/site/ && cp video/renderer/harness/site/harness-film.tsx apps/site/src/
+cp video/renderer/harness/web/harness-film.html apps/web/
+(cd apps/site && npx vite --port 5198) & (cd apps/web && npx vite --port 5199) &
+cd video/renderer && node capture-v2.mjs
+node stills.mjs 4 14 30 58 99 133      # check frames
+node render.mjs 30 0 155 ../renders/film-v2-silent.mp4
+python3 voice/synth.py af_heart <dir>   # writes the narration wavs and their timings
+python3 voice/mix.py <dir> voice/timing.json ../renders/soundtrack-v2.wav
+ffmpeg -i ../renders/film-v2-silent.mp4 -i ../renders/soundtrack-v2.wav -c:v copy -c:a aac -b:a 192k -shortest ../renders/ACAN_v2_Hackathon_Master.mp4
+```
+
+## How the v1 UI captures were made
 
 `renderer/capture-dashboard.mjs` and `renderer/capture-site.mjs` render the real React components from `apps/web` and `apps/site` in Chromium, with ACAN's fonts, in the dark theme. Copy the harness files first:
 

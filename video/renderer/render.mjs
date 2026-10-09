@@ -1,7 +1,7 @@
 // Renders film.html to video frames piped into ffmpeg: node render.mjs [fps] [from] [to] [out.mp4]
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-const fps = Number(process.argv[2] ?? 30), from = Number(process.argv[3] ?? 0), to = Number(process.argv[4] ?? 170);
+const fps = Number(process.argv[2] ?? 30), from = Number(process.argv[3] ?? 0), to = Number(process.argv[4] ?? 155);
 const outFile = process.argv[5] ?? new URL("../renders/film-silent.mp4", import.meta.url).pathname;
 const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });

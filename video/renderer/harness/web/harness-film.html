@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body><div class="page"><section class="card" id="cap"><div class="step">✓</div><div class="body"><h2 id="tasks">Tasks to sign (provenance gate)</h2><div id="h"></div></div></section></div>
+<script type="module">
+import "./src/main-buffer.ts";
+import "./src/styles.css";
+import React from "react"; import { createRoot } from "react-dom/client";
+// The task demo:gate asked for (scripts/demo-gate.ts), as the guardian service lists it.
+const ACCOUNT = new URLSearchParams(location.search).get("account");
+const task = { id: "t1", createdAt: Date.now(), status: "pending", account: ACCOUNT, task: "Buy the cheapest ledger report", product: "/api/ledger", maxUsdc: "0.02" };
+const real = window.fetch.bind(window);
+window.fetch = async (u, i) => String(u).endsWith("/tasks") ? new Response(JSON.stringify([task])) : real(u, i);
+const { TasksPanel } = await import("./src/TasksPanel.tsx");
+createRoot(document.getElementById("h")).render(React.createElement(TasksPanel, { account: ACCOUNT }));
+</script></body></html>

@@ -68,3 +68,26 @@ stated limit), **DEMO** (works, but only in a demo setting), **ROADMAP** (not bu
 - Any user counts, volumes, performance numbers or partnerships: none exist.
 - "Audited", "secure", "safe" as guarantees: not claimed.
 - Transaction hashes other than those linked in the README.
+
+## Film v2 (2:35, 9 Oct 2026)
+
+| # | Claim | Status | Evidence | Video |
+|---|---|---|---|---|
+| V1 | In May 2026 a Morse-code prompt led Grok to issue a command a trading bot (Bankr) executed, sending 3 billion DRB to the attacker, worth over $150,000 | External, reported | OECD.AI incident record 2026-05-04; The Crypto Times 4 May 2026; Giskard 7 May 2026. Value range $150,000–200,000 across reports; recovery left out (reports differ). "In seconds" not used (no source times it) | Allowed, retold in recreated text, sources on screen |
+| V2 | Paying an unlisted address is refused by the smart account (#3401) | IMPLEMENTED | F4 | Allowed |
+| V3 | A payment steered by fetched content to an allowed shop, inside every limit, is not co-signed | IMPLEMENTED | README "Verified on testnet" (Tidewire task held); `packages/core/src/provenance/cosigner.ts`; 19 adversarial tests | Allowed |
+| V4 | The agent's key alone is refused on a gated rule (#3213, OZ weighted threshold) | IMPLEMENTED | README "Verified on testnet"; research Soroban tests | Allowed |
+| V5 | The clean task was co-signed and paid | IMPLEMENTED | tx `c7356335…` | Allowed |
+| V6 | The planner never sees fetched content; the co-signer has no AI and re-runs the plan | IMPLEMENTED | `apps/relay/server.mjs` PLANNER_PROMPT and `/plan`; `cosigner.ts` | Allowed |
+| V7 | The gate works for MCP clients; tasks are signed in the dashboard; matching purchase paid, others refused | IMPLEMENTED | `npm run demo:gate` output in README, tx `35cf78c6…` | Allowed |
+| V8 | Agents hiring agents: hand-offs only narrow, spend counts up the chain, cancelling cascades | IMPLEMENTED (co-signer enforced) | `delegation.ts`, 7 tests; site run 9 Oct 2026 | Allowed |
+| V9 | Private mode hides amounts on-chain; the auditor key reads them | IMPLEMENTED | README "Private mode"; replay of the recorded run | Allowed |
+| V10 | Receipts re-run why each payment was allowed or held | IMPLEMENTED | `explain.ts`, 3 tests; site run 9 Oct 2026 | Allowed |
+
+**What the v2 captures stage** (`renderer/capture-v2.mjs`, `apps/site/src/harness-film.tsx`):
+the real site and dashboard components, with the network replaced. The co-signer, the plan
+runner, request signing and the receipt's offline checks run for real in the page. The
+planner's replies are the two example plans in its own system prompt (temperature 0). The
+chain's answers are the outcomes observed on testnet: paid (`c7356335…` for the clean
+task), #3213 for the agent alone, #3401 for an unlisted address. Clock times, account and
+key strings in the captures belong to the harness's own deterministic keys.
