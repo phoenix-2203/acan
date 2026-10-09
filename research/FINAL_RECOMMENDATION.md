@@ -99,3 +99,12 @@ Estimate: about 3–4 days. Nothing in today's flow changes unless the guardian 
 - A label bypass that cannot be fixed without making every payment escalate.
 - On testnet, the facilitator or smart-account-kit cannot carry two signers.
 - The escalation rate on realistic tasks is so high that it becomes an approval screen in disguise.
+
+
+## Additional adversarial finding: provenance is not intent binding (2026-10-09)
+
+During an independent source review, I found a gap not covered by the existing candidate tests. The co-signer re-executes the submitted plan and labels the provenance of values, but it does not independently require that a clean payment satisfies the signed product-selection policy. A malicious planner can ignore the user's requested product, select another item directly from the guardian's pinned catalog, and produce a recipient and price labelled only `pinned`. Those labels look trusted even though the plan violates the user's request.
+
+A minimal attack was added on the isolated branch `research/provenance-intent-binding`: a signed request asks for `ledger-report`, while the submitted plan selects the cheapest item across the entire catalog (the unrelated `news-digest`). The prototype co-signer now independently checks that a clean payment matches the signed `product` and `selection: cheapest` fields and the cheapest pinned offer for that product. An adversarial regression test covers this case.
+
+**Verification status:** the patch is committed on the research branch, but the new test has not yet been executed in this environment. Do not count it as passing until CI runs. This check is a narrow prototype safeguard, not a general proof of user intent. A production version must use a typed, signed task schema and independently recompute every permitted choice; it must not trust arbitrary planner-authored plan structure or free-text task interpretation.
