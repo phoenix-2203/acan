@@ -445,3 +445,21 @@ td:first-child { width: 48%; }
 .team li + li::before { content: ""; position: absolute; left: -16px; top: -11px; width: 14px; height: 32px; border-left: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent); border-bottom-left-radius: 8px; }
 .team li.off { opacity: 0.55; }
 .team-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* private replay */
+.replay-head { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { background: transparent; color: var(--muted); border: none; border-radius: 0; padding: 9px 13px; font-size: 13px; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.seg button:hover:not(:disabled) { transform: none; box-shadow: none; }
+.replay-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.replay-stats > div { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.replay-stats b { font-size: 20px; }
+.replay-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.replay-list li { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; }
+.replay-list li.settle { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.dot-v { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); justify-self: center; }
+.hidden-amt { font-family: "IBM Plex Mono", monospace; letter-spacing: 0.04em; background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+.reveal { color: var(--accent); animation: rise 0.35s var(--ease) both; }
+@media (max-width: 700px) { .replay-stats { grid-template-columns: 1fr 1fr; } .replay-list li { grid-template-columns: 18px 1fr; } .replay-list li > a { grid-column: 2; } }
+.replay-list li.empty { display: block; }

@@ -3,6 +3,7 @@ import { ASSETS } from "@acan/core/browser";
 import { AccountView } from "../AccountView";
 import { DEPLOYMENT, REPO_URL } from "../deployment";
 import { Icon, Tx } from "../ui";
+import { PrivateReplay } from "./PrivateReplay";
 
 export function ProvenanceLearn() {
   return (
@@ -327,6 +328,7 @@ export function PrivacyLearn() {
   ];
   return (
     <div className="stack">
+      <PrivateReplay />
       <div className="card-grid">
         <section className="ap-card">
           <span className="mono muted">01</span>
