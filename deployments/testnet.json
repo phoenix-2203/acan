@@ -19,5 +19,6 @@
     "address": "CA2PF5YGJZCI7JD2NVWROQ7TBHWVEE2P6MX5IYUQUMAYBM6LAWPZJ2FG",
     "version": "0.3"
   },
+  "cosignerGatePolicy": "CDFMTQUF5EKXKCXXXN2UYZUXM2CUYMIHXNTJQF33ZNR2OAHWMYFRIOLP",
   "aiRelay": "https://acan-ai.duckdns.org"
 }
