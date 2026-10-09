@@ -8,10 +8,13 @@ import { Icon, VIEWS } from "./ui";
 import { AutopilotView } from "./views/Autopilot";
 import { HowLearn, PrivacyLearn, ProofLearn, ProvenanceLearn, RunLearn, SecurityLearn } from "./views/Learn";
 import { WalletView } from "./views/Wallet";
+import { TeamView } from "./views/Team";
 
 const INTRO: Record<string, string> = {
   autopilot:
     "An AI agent that pays on its own. Each payment needs the provenance co-signer, which signs only what traces back to your own request. Try the Tidewire task: the note it reads tells the agent to buy something else.",
+  team:
+    "Agents hiring agents. Your agent hands part of your task to a sub-agent, which can hand part of its share on. Each hand-off can only narrow, every payment counts against every budget back up to you, and cancelling one link stops everything below it.",
   wallet: "Everything runs in your browser against Stellar testnet. The refusals you see are real contract errors, not checks in this page.",
   agent: "The agent proposes, you pick, and your smart account has the final word. Try to talk it into paying a stranger.",
   live: `ACAN's own guardian account, read from testnet now. Rule #${DEPLOYMENT.agentRuleId} is the AI agent's allowance, in USDC, with the merchant budget policy attached.`,
@@ -26,7 +29,7 @@ const INTRO: Record<string, string> = {
 };
 
 /** Views that use the sandbox show the activity log beside them. */
-const WITH_ACTIVITY = new Set(["autopilot", "wallet", "agent"]);
+const WITH_ACTIVITY = new Set(["autopilot", "team", "wallet", "agent"]);
 
 export function Shell({ view }: { view: string }) {
   const v = VIEWS.find((x) => x.id === (view === "live" ? "proof" : view)) ?? VIEWS[0];
@@ -85,6 +88,8 @@ function body(id: string): ReactNode {
   switch (id) {
     case "autopilot":
       return <AutopilotView />;
+    case "team":
+      return <TeamView />;
     case "wallet":
       return <WalletView />;
     case "agent":

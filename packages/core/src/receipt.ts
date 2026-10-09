@@ -72,6 +72,10 @@ export interface TaskReceipt {
     /** The co-signer's public key (G...). */
     cosigner: string;
     networkPassphrase: string;
+    /** Sub-mandates from the request down to the sub-agent that paid (agents hiring agents). */
+    chain?: unknown[];
+    /** Agent keys allowed to start a chain. */
+    agentKeys?: string[];
   };
 }
 

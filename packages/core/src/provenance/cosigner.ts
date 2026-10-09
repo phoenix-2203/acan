@@ -20,6 +20,7 @@ import { buildAuthDigest } from "../agent-signer.js";
 import { decodeTransfer, signaturePayloadOf, type DecodedTransfer, type ExternalSignature } from "./auth.js";
 import { runPlan, untrusted, type PricedItem, type Step } from "./plan.js";
 import { canonicalRequestJson, verifyRequest, type SignedRequest } from "./request.js";
+import { checkChain, type SignedDelegation } from "./delegation.js";
 
 export interface CosignerConfig {
   secret: string;
@@ -34,6 +35,8 @@ export interface CosignerConfig {
   catalog: PricedItem[];
   /** Unix seconds (injectable for tests). */
   now?: () => number;
+  /** Agent keys allowed to hand part of a request to a sub-agent (first link of a chain). */
+  agentKeys?: string[];
 }
 
 export interface ReviewCase {
@@ -44,6 +47,8 @@ export interface ReviewCase {
   payIndex: number;
   /** Base64 XDR of the unsigned SorobanAuthorizationEntry. */
   authEntry: string;
+  /** Sub-mandates from the request down to the sub-agent making this payment. */
+  chain?: SignedDelegation[];
 }
 
 export type Decision =
@@ -57,9 +62,20 @@ export class ProvenanceCosigner {
   private readonly key: Keypair;
   private readonly spent = new Map<string, bigint>();
   private readonly signed = new Map<string, Extract<Decision, { verdict: "cosign" }>>();
+  private readonly revoked = new Set<string>();
 
   constructor(private readonly cfg: CosignerConfig) {
     this.key = Keypair.fromSecret(cfg.secret);
+  }
+
+  /** Cancel a request (requestId) or a sub-mandate (delegationId): it and everything below it stop at the next payment. */
+  revoke(id: string): void {
+    this.revoked.add(id);
+  }
+
+  /** Spent so far under a request or sub-mandate id (atomic units). */
+  spentUnder(id: string): bigint {
+    return this.spent.get(id) ?? 0n;
   }
 
   get publicKey(): Buffer {
@@ -77,6 +93,8 @@ export class ProvenanceCosigner {
     if (now < r.issuedAt || now > r.issuedAt + r.ttlSeconds) return reject("request expired");
     const max = r.fields.maxAmount;
     if (!max || !/^\d+$/.test(max)) return reject("request has no maxAmount");
+    const chain = checkChain(c.request, c.chain ?? [], { agentKeys: this.cfg.agentKeys ?? [], now, revoked: this.revoked });
+    if (!chain.ok) return reject(chain.reason);
 
     // 2. What the entry really does.
     let entry: xdr.SorobanAuthorizationEntry;
@@ -91,7 +109,7 @@ export class ProvenanceCosigner {
     // 3. Re-run the plan over the co-signer's own price book.
     let pays;
     try {
-      pays = runPlan(c.plan, { request: r.fields, catalog: this.cfg.catalog, transcript: c.transcript });
+      pays = runPlan(c.plan, { request: chain.fields, catalog: this.cfg.catalog, transcript: c.transcript });
     } catch (e) {
       return reject(`plan failed: ${msg(e)}`);
     }
@@ -127,8 +145,10 @@ export class ProvenanceCosigner {
     const entryKey = hash(entry.toXDR()).toString("hex");
     const again = this.signed.get(entryKey);
     if (again) return again;
-    const used = this.spent.get(r.nonce) ?? 0n;
-    if (used + t.amount > BigInt(max)) return reject("request budget exceeded");
+    // Every budget from the request down to this sub-agent must have room.
+    for (const [i, b] of chain.budgets.entries()) {
+      if ((this.spent.get(b.key) ?? 0n) + t.amount > b.max) return reject(i === 0 ? "request budget exceeded" : `sub-mandate ${i} budget exceeded`);
+    }
 
     // 7. Sign the digest the smart account will check, for the configured rule only.
     const payload = signaturePayloadOf(entry, this.cfg.networkPassphrase);
@@ -140,7 +160,7 @@ export class ProvenanceCosigner {
       caseHash,
       transfer: t,
     };
-    this.spent.set(r.nonce, used + t.amount);
+    for (const b of chain.budgets) this.spent.set(b.key, (this.spent.get(b.key) ?? 0n) + t.amount);
     this.signed.set(entryKey, decision);
     return decision;
   }

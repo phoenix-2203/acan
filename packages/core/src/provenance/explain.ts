@@ -17,6 +17,7 @@ import type { SignedReceipt } from "../receipt.js";
 import { decodeTransfer, signaturePayloadOf } from "./auth.js";
 import { runPlan, untrusted, type PricedItem, type Step } from "./plan.js";
 import { verifyRequest, type SignedRequest } from "./request.js";
+import { checkChain, type SignedDelegation } from "./delegation.js";
 
 const units = (atomic: bigint) => {
   const s = atomic.toString().padStart(8, "0");
@@ -45,9 +46,20 @@ export function explainReceipt(signed: SignedReceipt): ReceiptCheck[] {
       : "The user's request signature does not verify, or it is for another account",
   });
 
+  let fields = req.request.fields;
+  if (p.chain?.length) {
+    const at = Math.floor(Date.parse(r.startedAt) / 1000);
+    const c = checkChain(req, p.chain as SignedDelegation[], { agentKeys: p.agentKeys ?? [], now: at, revoked: new Set() });
+    out.push({
+      status: c.ok ? "ok" : "fail",
+      text: c.ok ? `${p.chain.length} sub-mandate(s) from the request down to the paying sub-agent: each signed by its parent, each only narrower` : `Delegation chain: ${c.reason}`,
+    });
+    if (!c.ok) return out;
+    fields = c.fields;
+  }
   let pays;
   try {
-    pays = runPlan(p.plan as Step[], { request: req.request.fields, catalog: p.catalog as PricedItem[], transcript: p.transcript });
+    pays = runPlan(p.plan as Step[], { request: fields, catalog: p.catalog as PricedItem[], transcript: p.transcript });
   } catch (e) {
     out.push({ status: "fail", text: `The plan does not re-run: ${e instanceof Error ? e.message : String(e)}` });
     return out;

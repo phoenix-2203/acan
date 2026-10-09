@@ -38,6 +38,14 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   pulse: <path d="M3 12h4l2.5-6 5 12L17 12h4" />,
+  team: (
+    <>
+      <circle cx="12" cy="5" r="2.2" />
+      <circle cx="6" cy="18" r="2.2" />
+      <circle cx="18" cy="18" r="2.2" />
+      <path d="M12 7.2v4M12 11.2 6.8 16M12 11.2l5.2 4.8" />
+    </>
+  ),
   eye: (
     <>
       <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
@@ -125,6 +133,7 @@ export interface AppView {
 
 export const VIEWS: AppView[] = [
   { id: "autopilot", group: "Try", title: "Autopilot", icon: "trace", blurb: "An agent that pays on its own, only for what traces back to you", isNew: true },
+  { id: "team", group: "Try", title: "Agent team", icon: "team", blurb: "Your agent hires sub-agents; authority narrows and cancels down the chain", isNew: true },
   { id: "wallet", group: "Try", title: "Wallet & allowance", icon: "wallet", blurb: "Create a passkey wallet and give an agent a capped allowance" },
   { id: "agent", group: "Try", title: "AI agent", icon: "bot", blurb: "Chat with an agent that spends from your wallet; try to trick it" },
   { id: "receipts", group: "Try", title: "Receipts", icon: "receipt", blurb: "Every task’s receipt: what was paid, and why it was allowed" },

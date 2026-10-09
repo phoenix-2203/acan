@@ -438,3 +438,10 @@ td:first-child { width: 48%; }
 .checks li.wait, .checks li.skip { color: var(--muted); }
 .checks button { justify-self: start; }
 
+
+/* agent team */
+.team { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.team li { position: relative; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); display: grid; gap: 8px; transition: opacity 0.25s; }
+.team li + li::before { content: ""; position: absolute; left: -16px; top: -11px; width: 14px; height: 32px; border-left: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent); border-bottom-left-radius: 8px; }
+.team li.off { opacity: 0.55; }
+.team-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

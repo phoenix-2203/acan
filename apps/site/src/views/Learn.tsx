@@ -42,6 +42,12 @@ export function ProvenanceLearn() {
             applies.
           </li>
           <li>
+            <b>Agents can hire agents, and authority only narrows.</b> Your agent can hand part of your request to a sub-agent with a
+            signed sub-mandate, which can hand part of its share on. Each hand-off can only narrow (same item, smaller budget, shorter life),
+            every payment counts against every budget back up to you, and cancelling one link stops everything below it. Sub-agents never
+            get a key on your account.
+          </li>
+          <li>
             <b>Anything else comes to you.</b> A payment that does not trace back is held, with the reason in plain words, for you to
             approve once with your passkey or deny.
           </li>
@@ -219,6 +225,12 @@ export function ProofLearn() {
                   <td>Provenance gate: Autopilot's “buy the cheapest ledger report” co-signed and paid; the injected Tidewire task held, and the agent's key alone refused by the smart account (#3213)</td>
                   <td>
                     <Tx hash="c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a" /> (the co-signed payment)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Provenance gate for any AI client (MCP / CLI) on ACAN's USDC account: a guardian-signed task, the matching purchase co-signed and paid; a pricier merchant and an uncovered item refused by the co-signer; the agent's key alone refused by the smart account (#3213)</td>
+                  <td>
+                    <Tx hash="35cf78c654596891cba2df9936e404c2d0302eba421298b875720d3eb743290f" /> (<code>npm run demo:gate</code>)
                   </td>
                 </tr>
                 <tr>

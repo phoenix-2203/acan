@@ -4,7 +4,7 @@
  * this browser against Stellar testnet.
  */
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { explainRefusal, type Refusal, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
+import { explainRefusal, taskPlan, type Refusal, type SignedDelegation, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
 import { SandboxAgent, type PayResult } from "./ai-agent";
 import { latestLedger, short, spendingLimit, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
@@ -61,6 +61,8 @@ interface Store {
   pay: (label: string, to: string, amount: bigint) => Promise<Outcome>;
   /** A payment the autonomous agent makes from a plan. */
   payFromPlan: (request: SignedRequest, plan: Step[], payIndex: number, to: string, amount: bigint) => Promise<Outcome>;
+  /** A sub-agent pays under a chain of sub-mandates (agents hiring agents). */
+  payDelegated: (who: string, request: SignedRequest, chain: SignedDelegation[], to: string, amount: bigint) => Promise<Outcome>;
   /** Show that the agent's key alone cannot pay under a gated rule. */
   tryAlone: (line: LogLine) => Promise<void>;
   approveOnce: (line: LogLine) => Promise<void>;
@@ -177,6 +179,13 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
     return r;
   }
 
+  async function payDelegated(who: string, request: SignedRequest, chain: SignedDelegation[], to: string, amount: bigint): Promise<Outcome> {
+    add("info", `${who}: buy the cheapest ledger report (${chain.length} sub-mandate${chain.length === 1 ? "" : "s"} deep)`);
+    const r = await sb().gatedPay({ request, plan: taskPlan(false) as unknown as Step[], transcript: {}, payIndex: 0, chain }, to, amount);
+    await record(`${who} buys the cheapest ledger report`, to, amount, r);
+    return r;
+  }
+
   const settle: Store["settle"] = (id, settled) =>
     setLog((ls) =>
       ls.map((x) =>
@@ -243,6 +252,7 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
       }),
     pay,
     payFromPlan,
+    payDelegated,
     tryAlone: (l) =>
       run("The agent signs alone…", async () => {
         const h = l.held!;

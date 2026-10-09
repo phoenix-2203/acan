@@ -37,6 +37,7 @@ import {
   signRequest,
   smartAccountTransfer,
   type PricedItem,
+  type SignedDelegation,
   type SignedRequest,
   type Step,
 } from "@acan/core/browser";
@@ -104,6 +105,8 @@ export interface GatedCase {
   plan: Step[];
   transcript: Record<string, string>;
   payIndex: number;
+  /** Sub-mandates down to the sub-agent paying (agents hiring agents). */
+  chain?: SignedDelegation[];
 }
 
 function load(): Saved | null {
@@ -338,7 +341,18 @@ export class Sandbox {
       verifier: OZ_SMART_ACCOUNT.ed25519Verifier,
       deviceKeys: [this.device.publicKey()],
       catalog: g.catalog,
+      agentKeys: [this.agent.publicKey()],
     }));
+  }
+
+  /** Cancel a request or sub-mandate in the co-signer: it and everything below it stop. */
+  cancel(id: string): void {
+    this.service().revoke(id);
+  }
+
+  /** Spent under a request or sub-mandate, as the co-signer counts it. */
+  spentUnder(id: string): bigint {
+    return this.service().spentUnder(id);
   }
 
   /**
