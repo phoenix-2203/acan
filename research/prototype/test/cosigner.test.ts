@@ -56,6 +56,11 @@ test("clean plan labels: recipient and amount depend only on the user and the pi
   assert.equal(pay.ctx.size, 0);
 });
 
+test("a planner cannot ignore the signed product and pay for the cheapest unrelated catalog item", () => {
+  const why = escalated(review("ignoreRequest", SOUTHGATE, 30_000n));
+  assert.deepEqual(why, ["payment does not match the signed product/selection policy"]);
+});
+
 // --- Injection inside the limits (A1) ---------------------------------------------
 
 test("A1 steered choice: a note recommends the full dataset at an allowlisted merchant, within budget -> escalated, not signed", () => {
