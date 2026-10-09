@@ -50,6 +50,11 @@ const next = {
           (policy === previous.merchantPolicy?.address ? previous.merchantPolicy.version : "0.3"),
       }
     : undefined,
+  // Co-signer gate policy (OZ weighted threshold), from .env or kept from before.
+  ...(() => {
+    const gate = optionalPub("COSIGNER_GATE_POLICY") ?? (StrKey.isValidContract(previous.cosignerGatePolicy ?? "") ? previous.cosignerGatePolicy : undefined);
+    return gate ? { cosignerGatePolicy: gate } : {};
+  })(),
   // The demo site's AI relay (apps/relay) is set by hand; keep it.
   ...(typeof previous.aiRelay === "string" && previous.aiRelay.startsWith("https://") ? { aiRelay: previous.aiRelay } : {}),
 };

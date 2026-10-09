@@ -33,6 +33,7 @@
     "receipt:verify": "tsx scripts/verify-receipt.ts",
     "guardian": "tsx scripts/guardian.ts",
     "allowlist:deploy": "tsx scripts/deploy-allowlist.ts",
+    "gate:deploy": "tsx scripts/deploy-gate.ts",
     "deployment:publish": "tsx scripts/publish-deployment.ts",
     "demo:allowlist": "tsx scripts/demo-allowlist.ts",
     "demo:caps": "tsx scripts/demo-caps.ts",

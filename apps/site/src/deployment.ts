@@ -8,6 +8,8 @@ export interface Deployment {
   agentVault?: string;
   merchants: { name: string; address: string }[];
   merchantPolicy?: { address: string; version: string };
+  /** OpenZeppelin weighted-threshold policy that makes the provenance co-signer required. */
+  cosignerGatePolicy?: string;
   /** HTTPS address of the AI relay (apps/relay) for the sandbox's AI chat; no chat without it. */
   aiRelay?: string;
 }
