@@ -99,3 +99,27 @@ Estimate: about 3–4 days. Nothing in today's flow changes unless the guardian 
 - A label bypass that cannot be fixed without making every payment escalate.
 - On testnet, the facilitator or smart-account-kit cannot carry two signers.
 - The escalation rate on realistic tasks is so high that it becomes an approval screen in disguise.
+
+---
+
+## Status update (2026-10-09, evening): approved, built, verified on testnet
+
+The direction was approved and moved from the isolated prototype into the product.
+`research/prototype/src/*` now re-exports `packages/core/src/provenance/*`, so the
+prototype's adversarial tests run against the product code.
+
+| What | Where | Testnet evidence |
+|---|---|---|
+| Gate in the browser (Autopilot): planner, signed request, labelled plan, co-signer, OZ weighted threshold | `apps/site`, `packages/core/src/provenance` | Clean task co-signed and paid ([`c7356335…`](https://stellar.expert/explorer/testnet/tx/c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a)). Injected task held. The agent's key alone was refused on-chain (#3213) |
+| Gate for any AI client (MCP / command line): co-signer service, gated x402 signer, tasks signed in the dashboard | `apps/cosigner`, `apps/mcp`, `apps/web`, `scripts/demo-gate.ts` | Matching purchase paid ([`35cf78c6…`](https://stellar.expert/explorer/testnet/tx/35cf78c654596891cba2df9936e404c2d0302eba421298b875720d3eb743290f)). The pricier merchant and the uncovered item were refused by the co-signer. The agent alone was refused (#3213) |
+| Explainable receipts | `packages/core/src/provenance/explain.ts`, site Receipts | Run on the site: every decision, including the hold, was re-run and verified |
+| Agents hiring agents (candidate C12, previously deferred) | `packages/core/src/provenance/delegation.ts`, site Agent team | Run on the site: narrowing, budgets charged up the chain, and cascading cancellation all behaved as specified |
+| On-chain gate policy | `contracts/cosigner-gate-policy` (OZ `weighted_threshold`, unchanged) | Deployed at `CDFMTQUF…RIOLP` |
+
+**What changed against the plan above.**
+- The prototype's "Not run on testnet" limitation is resolved. Two-signer payloads go
+  through ACAN's facilitator; it now also ignores bookkeeping events from ACAN's own
+  policies, while still checking token events.
+- C12 is implemented with the co-signer as the enforcer. Sub-agents hold no key on the
+  account, and the chain checks only the co-signature. The limits in "What cannot yet
+  be claimed" still apply.

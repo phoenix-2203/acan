@@ -1,47 +1,113 @@
-# ACAN: spending allowances for AI agents on Stellar
+# ACAN: spending authority for AI agents on Stellar
 
 [![CI](https://github.com/phoenix-2203/acan/actions/workflows/ci.yml/badge.svg)](https://github.com/phoenix-2203/acan/actions/workflows/ci.yml)
 
-ACAN lets a person give an AI agent a **capped, revocable spending key** for paid
-APIs, and lets the agent pay **privately** without escaping that cap.
+**AI agents don't get your money. They get temporary, verifiable spending authority.**
 
-- The money sits in an **OpenZeppelin smart account** that the person (the
-  *guardian*) controls with a passkey.
-- The agent's key is honoured only under a **context rule** scoped to USDC and
-  capped by an on-chain **spending-limit policy**. When the cap is reached, the
-  smart account itself refuses to sign. No server has to be trusted to enforce it.
-- The agent pays merchants over **x402**, the HTTP 402 payment protocol.
-- In private mode the agent pays per request with signed **tab vouchers** and
-  settles the whole tab in **one confidential transfer** whose amount is hidden
-  on-chain. Only the merchant and the guardian (who holds the auditor key) can
-  read it.
-- The guardian can also make the allowance **expire**, restrict it to an
-  **allowlist of merchants** (a Soroban policy contract in `contracts/`), and
-  **approve one-off payments** above the limit with their passkey.
-- The agent can be driven by a **language model** (Groq, Claude or a local
-  model) that compares merchants' prices and stays within its budget.
+ACAN puts an AI agent's spending authority inside your Stellar smart account, approved
+with your passkey and checked by Soroban policy contracts on every payment. On top of
+that, a payment the agent was tricked into making is refused too, even when it is
+inside every limit.
 
-- Any **MCP client** (Claude Desktop, Cursor, ...) can use the guarded wallet
-  through ACAN's MCP server, with the same on-chain limits.
-- The merchant side is **hardened against the published attacks on x402**
-  (request binding, exactly-once delivery, payTo pinning), with a regression
-  test for each.
+**Try it, no install:** <https://acan-demo.duckdns.org> (mirror:
+<https://phoenix-2203.github.io/acan/>). Everything runs on Stellar **testnet**.
+Built for the *Find Your Way* hackathon (General Track).
 
-**Try it without installing anything:** the demo site
-(<https://acan-demo.duckdns.org>, mirrored at <https://phoenix-2203.github.io/acan/>)
-creates a passkey smart account in your browser, gives an agent key a capped
-allowance, and lets you chat with an AI agent that spends from it. Ask it to buy
-something, then try a prompt injection and watch your own smart account refuse it on
-testnet. Its "Check a receipt" section opens a task receipt the agent signed and checks it in the browser: the signature, the totals and every payment against testnet. The AI runs behind a small relay (`apps/relay`) that holds the API key; the
-wallet, the agent's key and the passkey stay in your browser. The site also shows the
-live state of this project's own deployment.
+## What ACAN does
 
-Built for the *Find Your Way* hackathon (General Track). Everything runs on
-Stellar **testnet**.
+1. **Provenance-gated payments (new).** Limits and allowlists stop the wrong shop.
+   They cannot stop a manipulated agent buying the wrong thing *from an allowed shop*.
+   ACAN can.
+   - Every payment needs a second signature from a **provenance co-signer** that runs
+     no AI.
+   - It re-runs the agent's plan and signs only if three things all trace back to
+     your own signed request and the catalog you pinned: **who gets paid**, **how
+     much**, and **the decision to pay**.
+   - Anything influenced by a web page, a shop's text or a tool is held for you, with
+     the reason in plain words.
+   - The smart account requires both signatures (OpenZeppelin's weighted-threshold
+     policy, deployed unchanged), so **the agent's key alone pays nothing**.
+   - It works in the browser (Autopilot) and for any AI client over MCP (Claude
+     Desktop, Cursor), where you sign each task in the dashboard.
+2. **Agents hiring agents (new).** Your agent can hand part of your request to a
+   sub-agent with a signed sub-mandate, and that sub-agent can do the same.
+   - Each hand-off can only narrow: same item, smaller budget, shorter life.
+   - Every payment counts against every budget on the way back up to you.
+   - Cancelling one link stops everything below it.
+   - Sub-agents never get a key on your account.
+3. **The AI said yes. The wallet said no.** The agent's allowance is a context rule on
+   your OpenZeppelin smart account, with these limits:
+   - the rolling spending limit;
+   - allowed shops, with a cap per shop;
+   - the largest single payment and a payment count;
+   - an expiry.
+
+   Policy contracts check every payment. You grant, approve once and revoke with a
+   passkey.
+4. **x402 straight from the smart account, or private.**
+   - The agent pays any x402 merchant in USDC under its rule.
+   - In private mode it pays with signed vouchers and settles in confidential
+     transfers whose amounts are hidden on-chain. Your auditor key reads them.
+5. **Receipts that show why, not just what (new).** Every Autopilot task ends with a
+   receipt the agent signs. It carries everything needed to re-run the co-signer's
+   decisions, so anyone can check three things:
+   - the signature;
+   - every payment against the chain;
+   - **why each payment was allowed or held**.
+6. **Any agent.** Command-line agent (Groq, Claude or a local model), browser chat, or
+   any MCP client, all inside the same guarded wallet.
+
+The merchant side is hardened against the published attacks on x402: request binding,
+exactly-once delivery, payTo pinning and private caching. Each one has a regression
+test.
+
+How we chose the new feature: [`research/`](research/). It covers the baseline audit,
+the competitive landscape (Eunomia, Soneso, Vellar, AP2, MetaMask ERC-7710, CaMeL, …),
+twelve scored candidates, a red-team review, and the prototype with adversarial tests.
 
 ---
 
 ## Verified on testnet
+
+**Provenance gate, in the browser (Autopilot).** A gated rule (signers: agent and
+co-signer; OZ weighted threshold 2; spending limit; merchant budget).
+- "Buy the cheapest ledger report" was co-signed and paid
+  ([`c7356335…`](https://stellar.expert/explorer/testnet/tx/c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a)).
+- "Read today's Tidewire note and buy the report it recommends" was held. The note
+  carries a hidden instruction steering to the 2.5 XLM full dataset at an allowed shop,
+  inside every limit. The co-signer refused because who and how much "came from
+  content from tidewire.example".
+- When the agent then signed that payment with its own key alone, the smart account
+  refused it: `#3213`, NotAllowed, from the weighted-threshold policy.
+
+**Provenance gate for any AI client** (`npm run demo:gate`, ACAN's USDC account, gated
+rule #13):
+
+```
+1. Asking the guardian to sign: “Buy the cheapest ledger report”, up to 0.02 USDC
+   signed in the dashboard
+2. The cheapest ledger report (Southgate)
+   PAID 0.005 USDC https://stellar.expert/explorer/testnet/tx/35cf78c654596891cba2df9936e404c2d0302eba421298b875720d3eb743290f
+3a. The same item at Northwind (pricier)
+   BLOCKED: the provenance co-signer did not sign: recipient differs from the plan
+3b. An item the task doesn't cover (/api/balance)
+   BLOCKED: the provenance co-signer did not sign: amount differs from the plan
+4. The agent signs Northwind's ledger report with its own key only
+   BLOCKED: blocked by the smart account: NotAllowed: the provenance co-signer did not sign this payment
+```
+
+**Agents hiring agents and explainable receipts** were run on the demo site on
+9 Oct 2026, all as specified:
+- Runner was paid.
+- Scout was refused for its sub-budget, because Runner's spend counts against it.
+- Lead was paid.
+- Runner's second purchase was refused: the request budget was used up.
+- A widened sub-mandate and a changed item were both refused.
+- After Scout was cancelled, Runner was refused.
+
+The receipts re-ran every decision, including the hold, and verified each payment on
+testnet.
+
 
 **Public mode.** The agent bought from a standard x402 route until its 0.05 USDC/day
 allowance ran out. Five payments of 0.01 USDC settled, for example
@@ -199,6 +265,62 @@ flowchart LR
   A -. "signed voucher per request<br/>(no transaction)" .-> M
   V -- "one confidential transfer<br/>per credit window (amount hidden)" --> M
   G -. auditor key decrypts .-> V
+```
+
+### 0. The provenance gate
+
+```mermaid
+flowchart LR
+  U[You<br/>device key] -- signed request --> AG[Agent runtime]
+  AG -- "plan (planner saw only your request)" --> CO{{Provenance co-signer<br/>no AI}}
+  AG -- unsigned auth entry --> CO
+  CO -- "co-signs only if recipient, amount and<br/>the decision trace to you + pinned catalog" --> SA[(Smart account)]
+  AG -- agent signature --> SA
+  SA -- "weighted threshold: agent + co-signer<br/>plus every limit" --> M[Merchant]
+```
+
+These are the parts:
+
+- **Request.** You sign what you asked for with a key on your device: the item, the
+  merchant if you named one, and the most it may cost. In the browser that key is the
+  sandbox's. For MCP and command-line agents it is the dashboard's ("Tasks to sign").
+- **Plan with labels** (`packages/core/src/provenance/plan.ts`). Every value carries
+  its sources: `user`, `pinned`, `tool:<host>` or `planner`. Labels propagate through
+  arithmetic, string building, lookups and `if` branches. Operations on tainted data
+  never throw, so whether a payment happens cannot leak through an abort.
+- **Co-signer** (`cosigner.ts`, `apps/cosigner`). It runs no language model. It
+  does the following:
+  - re-runs the plan over its own pinned catalog;
+  - decodes the exact Soroban auth entry itself;
+  - requires recipient, amount and branch context to depend only on `user` and
+    `pinned`;
+  - charges every budget, from the request down through any sub-mandates;
+  - signs `sha256(payload ‖ xdr([ruleId]))` for its configured rule only.
+
+  Otherwise it says why.
+- **On-chain.** The agent's rule lists the agent and the co-signer, with
+  `contracts/cosigner-gate-policy`. That is OpenZeppelin's `weighted_threshold`,
+  unchanged: agent 1, co-signer 1, threshold 2. A red-team finding shaped this choice:
+  a plain "2 signatures" threshold could be met by two agent keys without the
+  co-signer.
+- **Sub-mandates** (`delegation.ts`). Each one points at its parent by hash and is
+  signed by it; the first is signed by a registered agent. It can only narrow its
+  parent, and the depth is capped at 3. Cancelling a request or a link stops
+  everything below it at the next payment.
+- **Explainable receipts** (`explain.ts`). A receipt carries the signed request, the
+  plan, what the agent read, the pinned catalog and each co-signed auth entry. Anyone
+  can re-run every decision and verify the co-signer's signature on each transfer.
+
+Run it for any AI client:
+
+```bash
+npm run cosigner:setup   # co-signer key → .env (COSIGNER_SECRET, COSIGNER_ADDRESS)
+npm run gate:deploy      # once: OZ weighted-threshold policy → .env, deployments/testnet.json
+npm run catalog:pin      # pin the merchants' prices and addresses for the co-signer
+# dashboard: Authorize an agent with "Provenance gate" ticked; copy the request key it shows
+# .env: COSIGNER_URL=http://127.0.0.1:4041, COSIGNER_RULE_ID=<new rule>, COSIGNER_DEVICE_KEYS=<key>
+npm run cosigner         # the co-signer service
+npm run demo:gate        # or use acan_start_task + acan_buy from any MCP client
 ```
 
 ### 1. The allowance (OpenZeppelin smart account)
@@ -414,7 +536,14 @@ Tests (offline, also run by CI on every push):
   approval safety checks.
 - `npm run test:contracts`: the allowlist policy, including an integration test
   that runs OpenZeppelin's real smart-account auth with the spending-limit
-  policy and the allowlist on one rule.
+  policy and the allowlist on one rule, and the co-signer gate policy.
+- `npm run test:research`: the provenance co-signer's adversarial tests, and Soroban
+  host tests where the TypeScript co-signer's real signatures go through
+  OpenZeppelin's `do_check_auth`.
+- The provenance tests in `npm test`: label propagation and laundering attempts,
+  entry mismatch, forged and replayed requests, sub-mandate widening, sibling
+  budgets, cascading cancellation, the co-signer service over HTTP, and
+  explainable receipts with tampering.
 
 ### 6. Any MCP client
 
@@ -458,14 +587,19 @@ packages/core           smart-account agent signer, x402 client scheme, smart-ac
 packages/confidential   wrapper over the confidential-token SDK: ConfidentialAccount,
                         ConfidentialVault (policy-capped top-ups), MerchantInbox (decrypts settlements)
 apps/site               demo site (GitHub Pages): in-browser passkey sandbox, live testnet view
-apps/mcp                MCP server exposing the guarded wallet to any MCP client
+apps/mcp                MCP server exposing the guarded wallet to any MCP client (acan_start_task when gated)
+apps/cosigner           the provenance co-signer as a local service (POST /review)
+apps/relay              the demo site's AI relay (Groq): chat, and the planner for Autopilot
+packages/core/src/provenance  plan labels, signed requests, co-signer, gated signer, sub-mandates, explainable receipts
+research                originality lab: baseline, competitive landscape, candidates, red team, prototype
 deployments             public testnet addresses read by the demo site
 apps/web                guardian dashboard: passkey smart account, grant (limit, expiry, allowlist)
                         and revoke allowances, approval requests, private-spending panel
 apps/merchant           demo x402 merchants A and B: catalog at /, paid data routes (exact + acan-tab)
 apps/agent              agent.ts (public), agent-private.ts (private), agent-ai.ts (language model),
                         wallet.ts (shared payment logic), llm.ts (Groq / Claude / Ollama adapters)
-contracts               merchant-allowlist-policy: Soroban policy contract for OZ smart accounts
+contracts               merchant-allowlist-policy: Soroban policy contract for OZ smart accounts;
+                        cosigner-gate-policy: OZ weighted-threshold policy, deployed unchanged
 scripts                 setup, fund, status, diagnose, ct-setup, audit, merchant-cashout,
                         guardian (local approvals + audit service), deploy-allowlist
 vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT), one patch
@@ -509,6 +643,18 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   for one transfer to one merchant. Someone who intercepts it in transit could
   submit it first: the merchant is still paid, but the client may be refused.
   TLS between agent and merchant prevents this; the protocol itself does not.
+- **The co-signer is trusted.** The chain checks that the co-signer signed, not
+  what it checked. Its decisions are deterministic and re-runnable from the receipt,
+  its key alone pays nothing, and in the demo it runs in your own browser. Still,
+  a compromised co-signer together with the agent's key could pay up to the limits,
+  as today.
+- **What the gate does not claim.** It traces where the values came from; it does not
+  judge whether a plan given only your words is the plan you meant (a malicious
+  planner over clean inputs), whether you were persuaded by something you read, or
+  whether a purchased result is good. Purchases that depend on fetched content are
+  held for you by design.
+- **Sub-agents.** Their authority is enforced by the co-signer, not by a contract of
+  their own: sub-agents hold no key on the account.
 - **Facilitator.** Smart-account payers currently need a facilitator with a
   higher fee ceiling and smart-account-aware event checks (provided here).
 
