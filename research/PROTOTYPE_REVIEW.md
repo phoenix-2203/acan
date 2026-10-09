@@ -31,4 +31,4 @@ The change is intentionally narrow. It does not solve arbitrary task intent, pro
 
 ## Verification state
 
-The branch contains the patch and regression test. This review session could read/write repository files through GitHub but did not execute the TypeScript or Rust tests locally. The regression must be confirmed by CI before claiming it passes. No deployed contracts, live product code, or `master` files were changed.
+The branch contains the patch and regression test. GitHub Actions CI passed for code commit `8b94c8fd6b441fef84a036db4509f843b6005ee7`: TypeScript typecheck, offline tests, dashboard/site builds, Rust contract tests and Soroban WASM build all succeeded. No deployed contracts, live product code, or `master` files were changed. Passing tests do not prove the full security claim; see the limitations above.
