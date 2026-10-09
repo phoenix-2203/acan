@@ -82,7 +82,7 @@ export async function gatedSmartAccountTransfer(opts: {
   return hash;
 }
 
-function setExpiration(entry: xdr.SorobanAuthorizationEntry, ledger: number): void {
+export function setExpiration(entry: xdr.SorobanAuthorizationEntry, ledger: number): void {
   const c = entry.credentials();
   switch (c.switch().name) {
     case "sorobanCredentialsAddress":

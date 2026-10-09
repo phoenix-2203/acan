@@ -14,6 +14,11 @@
  *   GET  /budgets/:id           one request's status, with the new rule id once approved
  *   POST /budgets/:id/approve   the dashboard reports the rule it created with the passkey
  *   POST /budgets/:id/reject
+ *   POST /tasks                 the agent asks the guardian to sign a task (provenance gate)
+ *   GET  /tasks                 pending and recent tasks (the dashboard polls this)
+ *   GET  /tasks/:id             one task's status, with the signed request once signed
+ *   POST /tasks/:id/sign        the dashboard posts the request signed by its device key
+ *   POST /tasks/:id/reject
  *   POST /freeze                {frozen: boolean} while frozen, agent requests are
  *                               refused and pending ones are rejected
  *
@@ -94,6 +99,9 @@ app.get("/config", (_req, res) => {
     // v0.3 adds the per-payment limit; set by npm run allowlist:deploy.
     allowlistPolicyVersion: env.ALLOWLIST_POLICY_VERSION || "0.2",
     agentAddress: env.AGENT_ADDRESS || null,
+    // Provenance gate: the co-signer's public key and the gate policy, for a gated rule.
+    cosignerAddress: env.COSIGNER_ADDRESS || null,
+    cosignerGatePolicy: env.COSIGNER_GATE_POLICY || null,
     recipients,
   });
 });
@@ -185,6 +193,74 @@ app.post("/approvals/:id/reject", (req, res) => {
   if (!a || a.status !== "pending") return void res.status(409).json({ error: "not pending" });
   a.status = "rejected";
   console.log(`rejected: ${a.amountUsdc} USDC to ${a.merchant} (${a.id.slice(0, 8)})`);
+  res.json({ ok: true });
+});
+
+// ---- signed tasks (provenance gate) ------------------------------------------
+
+interface TaskRequest {
+  id: string;
+  createdAt: number;
+  status: "pending" | "signed" | "rejected" | "expired";
+  account: string;
+  task: string;
+  product: string;
+  merchant?: string;
+  maxUsdc: string;
+  /** The SignedRequest the dashboard produced with its device key. */
+  signed?: unknown;
+}
+const tasks = new Map<string, TaskRequest>();
+
+app.post("/tasks", (req, res) => {
+  if (refuseIfFrozen(res)) return;
+  const b = req.body ?? {};
+  if (typeof b.task !== "string" || !b.task.trim() || typeof b.product !== "string" || !b.product) {
+    return void res.status(400).json({ error: "task and product are required" });
+  }
+  if (typeof b.maxUsdc !== "string" || !/^\d+(\.\d{1,7})?$/.test(b.maxUsdc)) return void res.status(400).json({ error: "maxUsdc must be a USDC amount" });
+  const t: TaskRequest = {
+    id: randomUUID(),
+    createdAt: Date.now(),
+    status: "pending",
+    account: String(b.account ?? ""),
+    task: b.task.slice(0, 300),
+    product: b.product.slice(0, 100),
+    merchant: typeof b.merchant === "string" && b.merchant ? b.merchant.slice(0, 200) : undefined,
+    maxUsdc: b.maxUsdc,
+  };
+  tasks.set(t.id, t);
+  console.log(`task to sign: "${t.task}" (${t.product}, up to ${t.maxUsdc} USDC) ${t.id.slice(0, 8)}`);
+  res.status(201).json({ id: t.id });
+});
+
+app.get("/tasks", (_req, res) => {
+  const now = Date.now();
+  for (const t of tasks.values()) if (t.status === "pending" && now - t.createdAt > APPROVAL_TTL_MS) t.status = "expired";
+  res.json([...tasks.values()].sort((x, y) => y.createdAt - x.createdAt).slice(0, 20));
+});
+
+app.get("/tasks/:id", (req, res) => {
+  const t = tasks.get(req.params.id);
+  if (!t) return void res.status(404).json({ error: "unknown task" });
+  res.json(t);
+});
+
+app.post("/tasks/:id/sign", (req, res) => {
+  const t = tasks.get(req.params.id);
+  if (!t || t.status !== "pending") return void res.status(409).json({ error: "not pending" });
+  const s = req.body?.signed;
+  if (!s || typeof s.signature !== "string" || typeof s.publicKey !== "string") return void res.status(400).json({ error: "missing signed request" });
+  t.signed = s;
+  t.status = "signed";
+  console.log(`task signed by the guardian's device key: "${t.task}" (${t.id.slice(0, 8)})`);
+  res.json({ ok: true });
+});
+
+app.post("/tasks/:id/reject", (req, res) => {
+  const t = tasks.get(req.params.id);
+  if (!t || t.status !== "pending") return void res.status(409).json({ error: "not pending" });
+  t.status = "rejected";
   res.json({ ok: true });
 });
 

@@ -4,3 +4,4 @@ export * from "./auth.js";
 export * from "./cosigner.js";
 export * from "./transfer.js";
 export * from "./explain.js";
+export * from "./gated-signer.js";

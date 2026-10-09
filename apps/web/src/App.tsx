@@ -34,6 +34,7 @@ import {
 } from "./guardian";
 import { auditCsv, auditJson, download } from "./audit-export";
 import { AgentChat } from "./AgentChat";
+import { TasksPanel } from "./TasksPanel";
 import { PolicyComposer } from "./PolicyComposer";
 
 type Busy =
@@ -98,6 +99,7 @@ export default function App() {
   /** Largest single payment in USDC as typed ("" = no limit). Needs policy v0.3. */
   const [maxPerPayment, setMaxPerPayment] = useState("");
   const [useAllowlist, setUseAllowlist] = useState(true);
+  const [useGate, setUseGate] = useState(true);
   const [audit, setAudit] = useState<AuditReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
   /** Agent rule ids that exist on-chain (null = could not read). */
@@ -241,7 +243,9 @@ export default function App() {
               version: config.allowlistPolicyVersion ?? "0.2",
             }
           : undefined;
-      const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period, expiry || undefined, allowlist);
+      const gate =
+        useGate && config?.cosignerGatePolicy && config.cosignerAddress ? { policy: config.cosignerGatePolicy, cosigner: config.cosignerAddress } : undefined;
+      const g = await grantAgent(agentKey.trim(), usdcToStroops(limit), period, expiry || undefined, allowlist, undefined, gate);
       setNotice(`Agent authorized under rule #${g.ruleId}. Copy the .env lines below into your project.`);
       setAgentKey("");
       await refresh();
@@ -520,6 +524,12 @@ export default function App() {
               )}
             </fieldset>
           )}
+          {config?.cosignerGatePolicy && config.cosignerAddress && (
+            <label className="inline">
+              <input type="checkbox" checked={useGate} onChange={(e) => setUseGate(e.target.checked)} /> Provenance gate: every payment also needs
+              the co-signer <code>{config.cosignerAddress.slice(0, 6)}…</code>, which signs only what traces back to a task you signed
+            </label>
+          )}
           <button onClick={grant} disabled={!account || busy !== null || !agentKey.trim()}>
             {busy === "grant" ? "Waiting for passkey…" : "Approve with passkey"}
           </button>
@@ -635,6 +645,14 @@ export default function App() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      <section className={`card ${account ? "" : "disabled"}`}>
+        <div className="step">✓</div>
+        <div className="body">
+          <h2 id="tasks">Tasks to sign (provenance gate)</h2>
+          <TasksPanel account={account} />
         </div>
       </section>
 

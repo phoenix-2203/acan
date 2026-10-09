@@ -30,6 +30,11 @@ import {
   spendingLimitState,
   stroopsToUsdc,
   usdcToStroops,
+  GatedAgentSigner,
+  ProvenanceEscalation,
+  remoteCosigner,
+  taskPlan,
+  type SignedRequest,
 } from "@acan/core";
 import { CONFIDENTIAL_TESTNET, ConfidentialAccount, ConfidentialVault, type VaultEvent } from "@acan/confidential";
 
@@ -62,6 +67,10 @@ export class AgentWallet {
   private readonly account?: ConfidentialAccount;
   private readonly vaultKp?: Keypair;
   readonly settlements: string[] = [];
+  /** Set when the rule is provenance-gated: the co-signer's address. */
+  readonly cosignerUrl?: string;
+  /** The guardian-signed task the agent is working on (gated rules only). */
+  task?: SignedRequest;
 
   constructor(
     readonly mode: Mode,
@@ -70,13 +79,24 @@ export class AgentWallet {
     ruleId?: number,
   ) {
     this.smartAccount = requireEnv("SMART_ACCOUNT");
-    this.ruleId = ruleId ?? Number(requireEnv("AGENT_RULE_ID"));
-    this.signer = new SmartAccountAgentSigner({
+    // Provenance gate: with COSIGNER_URL set, the agent pays under the gated
+    // rule (COSIGNER_RULE_ID) and every payment also needs the co-signer.
+    this.cosignerUrl = mode === "public" ? process.env.COSIGNER_URL : undefined;
+    this.ruleId = ruleId ?? Number(this.cosignerUrl ? requireEnv("COSIGNER_RULE_ID") : requireEnv("AGENT_RULE_ID"));
+    const opts = {
       smartAccount: this.smartAccount,
       agentSecret: requireEnv("AGENT_SECRET"),
       contextRuleId: this.ruleId,
       networkPassphrase: TESTNET.networkPassphrase,
-    });
+    };
+    this.signer = this.cosignerUrl
+      ? new GatedAgentSigner(
+          opts,
+          remoteCosigner(this.cosignerUrl, () =>
+            this.task ? { request: this.task, plan: taskPlan(Boolean(this.task.request.fields.merchant)), transcript: {}, payIndex: 0 } : undefined,
+          ),
+        )
+      : new SmartAccountAgentSigner(opts);
     this.client = new x402Client();
     if (mode === "public") {
       this.client.register("stellar:*", new SmartAccountExactStellarScheme(this.signer, { url: TESTNET.rpcUrl }));
@@ -126,6 +146,36 @@ export class AgentWallet {
   /** Sign a task receipt with the agent's key (anyone can verify it with the agent's public key). */
   signReceipt(r: TaskReceipt): SignedReceipt {
     return signReceipt(r, (d) => this.signer.signDigest(d), this.signer.agentAddress);
+  }
+
+  /**
+   * Gated rules: ask the guardian to sign a task (dashboard, the guardian's
+   * device key) and wait for it. Purchases then must trace back to it: the item
+   * (and merchant, if given) from the task, the price and address from the
+   * pinned catalog, at most maxUsdc in total.
+   */
+  async startTask(t: { task: string; product: string; merchant?: string; maxUsdc: string }, timeoutMs = 240_000): Promise<SignedRequest> {
+    if (!this.cosignerUrl) throw new Error("This agent's rule is not provenance-gated (set COSIGNER_URL)");
+    const guardian = process.env.GUARDIAN_URL ?? "http://127.0.0.1:4030";
+    const res = await fetch(`${guardian}/tasks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...t, account: this.smartAccount }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error ?? `guardian refused the task (${res.status})`);
+    this.log(`   waiting for the guardian to sign the task in the dashboard…`);
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const s = await (await fetch(`${guardian}/tasks/${body.id}`)).json();
+      if (s.status === "signed" && s.signed) {
+        this.task = s.signed as SignedRequest;
+        return this.task;
+      }
+      if (s.status !== "pending") throw new Error(`the guardian ${s.status} the task`);
+    }
+    throw new Error("the guardian did not sign the task in time");
   }
 
   /** Remaining allowance for the current period, in USDC. */
@@ -178,6 +228,24 @@ export class AgentWallet {
       payload = await this.client.createPaymentPayload({ ...required, accepts: [req] });
     } catch (err) {
       for (let e: any = err; e; e = e.cause) {
+        if (e instanceof ProvenanceEscalation) {
+          return {
+            ok: false,
+            status: "blocked",
+            url,
+            priceUsdc,
+            scheme,
+            payTo: req.payTo,
+            reason: `the provenance co-signer did not sign: ${e.why.join("; ")}`,
+            refusal: {
+              code: null,
+              title: "Not co-signed",
+              policy: "Provenance co-signer",
+              reason: `This purchase does not trace back to the task the guardian signed (${e.why.join("; ")}).`,
+              severity: "high",
+            },
+          };
+        }
         if (e instanceof PaymentRejectedError) {
           return {
             ok: false,

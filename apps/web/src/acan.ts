@@ -6,6 +6,7 @@ import {
   createCallContractContext,
   createEd25519Signer,
   createSpendingLimitParams,
+  createWeightedThresholdParams,
   type ContextRule,
 } from "smart-account-kit";
 import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
@@ -92,6 +93,8 @@ export async function grantAgent(
   },
   /** Label the rule as a task budget. */
   task?: string,
+  /** Provenance gate: the rule also needs this co-signer (OZ weighted threshold policy). */
+  gate?: { policy: string; cosigner: string },
 ): Promise<AgentGrant> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
@@ -119,11 +122,23 @@ export async function grantAgent(
       }),
     );
   }
+  const signers = [signer];
+  if (gate) {
+    if (!StrKey.isValidEd25519PublicKey(gate.cosigner)) throw new Error("Co-signer must be a G... public key");
+    const cosigner = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, StrKey.decodeEd25519PublicKey(gate.cosigner));
+    signers.push(cosigner);
+    // Agent 1, co-signer 1, threshold 2: the agent's key alone never suffices.
+    const weights = new Map<any, number>([
+      [signer, 1],
+      [cosigner, 1],
+    ]);
+    policies.set(gate.policy, kit.convertPolicyParams("weighted_threshold", createWeightedThresholdParams(2, weights)));
+  }
   // One passkey approval installs the rule with all its policies at once.
   const tx = await kit.rules.add(
     createCallContractContext(ASSETS.usdc.sac),
-    "agent-usdc",
-    [signer],
+    gate ? "agent-usdc-gated" : "agent-usdc",
+    signers,
     policies,
     validUntil,
   );

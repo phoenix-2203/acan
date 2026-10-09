@@ -162,6 +162,33 @@ server.registerTool(
   },
 );
 
+if (process.env.COSIGNER_URL && mode === "public") {
+  server.registerTool(
+    "acan_start_task",
+    {
+      title: "Start a task the guardian signs",
+      description:
+        "This wallet is provenance-gated: before buying, ask the guardian to sign the task. Name the product path the user asked for (e.g. /api/ledger), optionally the merchant URL, and the most it may cost in total. The guardian signs it in the dashboard (waits up to 4 minutes). After that, acan_buy pays only for that item at the cheapest pinned price, up to that total.",
+      inputSchema: {
+        task: z.string().min(3).max(300).describe("What the user asked for, in their words"),
+        product: z.string().regex(/^\/api\/[a-z-]+$/).describe("Product path, e.g. /api/ledger"),
+        merchant: z.string().optional().describe("Only if the user named one: merchant base URL exactly as listed"),
+        maxUsdc: z.string().regex(/^\d+(\.\d{1,7})?$/).describe("Most the task may spend in total, in USDC"),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ task, product, merchant, maxUsdc }) => {
+      try {
+        const s = await getWallet().startTask({ task, product, merchant, maxUsdc });
+        log(`task signed: "${s.request.task}"`);
+        return text({ signed: true, task: s.request.task, fields: s.request.fields, note: "acan_buy now pays only what traces back to this task" });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : String(e));
+      }
+    },
+  );
+}
+
 server.registerTool(
   "acan_settle_tabs",
   {

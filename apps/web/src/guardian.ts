@@ -90,7 +90,36 @@ export interface GuardianConfig {
   /** "0.2" or "0.3" (per-payment limit); older guardian services omit it (= "0.2"). */
   allowlistPolicyVersion?: "0.2" | "0.3";
   agentAddress: string | null;
+  /** Provenance gate (newer guardian services): co-signer public key and the gate policy. */
+  cosignerAddress?: string | null;
+  cosignerGatePolicy?: string | null;
   recipients: { address: string; label: string }[];
+}
+
+export interface TaskToSign {
+  id: string;
+  createdAt: number;
+  status: "pending" | "signed" | "rejected" | "expired";
+  account: string;
+  task: string;
+  product: string;
+  merchant?: string;
+  maxUsdc: string;
+}
+
+export async function fetchTasks(): Promise<TaskToSign[]> {
+  const r = await fetch(`${GUARDIAN_URL}/tasks`);
+  if (!r.ok) return [];
+  return r.json();
+}
+
+export async function postTask(id: string, outcome: { signed: unknown } | "reject"): Promise<void> {
+  const r = await fetch(`${GUARDIAN_URL}/tasks/${id}/${outcome === "reject" ? "reject" : "sign"}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(outcome === "reject" ? {} : outcome),
+  });
+  if (!r.ok) throw new Error(`guardian service: HTTP ${r.status}`);
 }
 
 export async function fetchConfig(): Promise<GuardianConfig> {
