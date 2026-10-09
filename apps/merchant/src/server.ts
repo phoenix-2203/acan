@@ -34,6 +34,7 @@ import { StrKey } from "@stellar/stellar-sdk";
 import {
   PaymentIdempotency,
   SmartAccountAwareFacilitator,
+  OZ_AUTH_CONTRACTS,
   TESTNET,
   TabFacilitatorScheme,
   TabLedger,
@@ -102,14 +103,20 @@ function facilitatorClient(): HTTPFacilitatorClient {
   const signer = createEd25519Signer(requireEnv("FACILITATOR_SECRET"), TESTNET.x402Network);
   const fac = new x402Facilitator().register(
     TESTNET.x402Network,
-    new SmartAccountAwareFacilitator([signer], {
+    new SmartAccountAwareFacilitator(
+      [signer],
+      {
       rpcConfig: { url: TESTNET.rpcUrl },
       // A smart-account payment runs __check_auth, the Ed25519 verifier and
       // the stateful spending-limit policy: its simulated resource fee (~0.23
       // XLM on testnet, mostly refundable) is far above the public
       // facilitator's 50,000-stroop ceiling. Allow up to 1 XLM by default.
       maxTransactionFeeStroops: Number(process.env.FACILITATOR_MAX_FEE_STROOPS ?? 10_000_000),
-    }),
+    },
+    // Also ACAN's own policies on the payer's rule (merchant budget, co-signer
+    // gate): their bookkeeping events move no funds. Token events are still checked.
+    [...OZ_AUTH_CONTRACTS, ...[process.env.ALLOWLIST_POLICY, process.env.COSIGNER_GATE_POLICY].filter((x): x is string => Boolean(x))],
+    ),
   );
   if (PRIVATE_ENABLED) {
     const merchantCt = new ConfidentialAccount({

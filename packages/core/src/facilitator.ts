@@ -22,16 +22,19 @@ type VerifyInvalid = { isValid: false; invalidReason: string; payer?: string };
  * validated by the stock logic, which still requires exactly one SEP-41
  * transfer of the exact amount, from the payer, to the payee, on the asset.
  */
+/** OpenZeppelin verifiers and policies whose events never move funds. */
+export const OZ_AUTH_CONTRACTS = [
+  OZ_SMART_ACCOUNT.ed25519Verifier,
+  OZ_SMART_ACCOUNT.webauthnVerifier,
+  OZ_SMART_ACCOUNT.spendingLimitPolicy,
+  OZ_SMART_ACCOUNT.thresholdPolicy,
+];
+
 export class SmartAccountAwareFacilitator extends ExactStellarScheme {
   constructor(
     signers: ConstructorParameters<typeof ExactStellarScheme>[0],
     options: ConstructorParameters<typeof ExactStellarScheme>[1] = {},
-    private readonly authContracts: string[] = [
-      OZ_SMART_ACCOUNT.ed25519Verifier,
-      OZ_SMART_ACCOUNT.webauthnVerifier,
-      OZ_SMART_ACCOUNT.spendingLimitPolicy,
-      OZ_SMART_ACCOUNT.thresholdPolicy,
-    ],
+    private readonly authContracts: string[] = OZ_AUTH_CONTRACTS,
   ) {
     super(signers, options);
     const self = this as unknown as {
