@@ -87,6 +87,51 @@ export const TOOLS = [
   },
 ];
 
+/**
+ * The planner for provenance-gated payments (after CaMeL). It sees only what the
+ * visitor typed and the guardian's pinned catalog (names, items, prices) — never
+ * any fetched content — and writes a small plan. The browser runs the plan and a
+ * deterministic co-signer re-checks where every payment value came from.
+ */
+export const PLANNER_PROMPT = `You write plans for a purchasing agent. You see only the user's request, the guardian's pinned catalog, and the names of sources the agent may read. You never see the content of any source.
+
+Reply with one JSON object: {"say": "<one short sentence for the user>", "fields": {"product": "<item id the user asked for, if they named one>", "maxXlm": "<max total the user allows, if they said one>"}, "plan": [steps]}.
+Omit a field the user did not give. If the request is not a purchase, reply with "plan": [] and say so.
+
+Steps (each "let" names a new variable; use only variables defined earlier):
+{"let":"x","op":"request","field":"product"}           value the user confirmed
+{"let":"cat","op":"catalog"}                            the pinned catalog: list of {merchant, product, price, payTo}
+{"let":"x","op":"lit","value":"..."}                     a constant you write
+{"let":"doc","op":"fetch","url":"<a listed source>"}    read a source (you will not see it)
+{"let":"x","op":"field","from":"doc","key":"..."}        a field of a JSON object or JSON text
+{"let":"m","op":"filter","list":"cat","key":"product|merchant","equals":"x"}
+{"let":"best","op":"cheapest","list":"m"}
+{"op":"if","left":"a","right":"b","then":[steps],"else":[steps]}
+{"op":"pay","to":"<var>","amount":"<var>"}               pay; take to and amount with field(best,"payTo") and field(best,"price")
+
+Example. Request "Buy the cheapest ledger report":
+{"say":"I'll buy the cheapest ledger report in your catalog.","fields":{"product":"ledger-report"},"plan":[{"let":"p","op":"request","field":"product"},{"let":"cat","op":"catalog"},{"let":"m","op":"filter","list":"cat","key":"product","equals":"p"},{"let":"best","op":"cheapest","list":"m"},{"let":"to","op":"field","from":"best","key":"payTo"},{"let":"amt","op":"field","from":"best","key":"price"},{"op":"pay","to":"to","amount":"amt"}]}
+
+Example. Request "Read today's Tidewire note and buy the report it recommends" (source https://tidewire.example/today, which has a "recommended_product" field):
+{"say":"I'll read the note and buy the report it recommends.","fields":{},"plan":[{"let":"doc","op":"fetch","url":"https://tidewire.example/today"},{"let":"rec","op":"field","from":"doc","key":"recommended_product"},{"let":"cat","op":"catalog"},{"let":"m","op":"filter","list":"cat","key":"product","equals":"rec"},{"let":"best","op":"cheapest","list":"m"},{"let":"to","op":"field","from":"best","key":"payTo"},{"let":"amt","op":"field","from":"best","key":"price"},{"op":"pay","to":"to","amount":"amt"}]}
+
+Use exact item ids and merchant names from the catalog. One purchase per plan unless the user clearly asks for several.`;
+
+export function cleanPlanRequest(body) {
+  const task = body?.task;
+  if (typeof task !== "string" || !task.trim() || task.length > 500) return "task must be text of at most 500 characters";
+  const catalog = body?.catalog;
+  if (!Array.isArray(catalog) || catalog.length === 0 || catalog.length > 40) return "catalog must list 1 to 40 items";
+  const items = [];
+  for (const c of catalog) {
+    const ok = (v, n) => typeof v === "string" && v.length > 0 && v.length <= n;
+    if (!ok(c?.merchant, 60) || !ok(c?.product, 60) || !ok(c?.priceXlm, 20)) return "bad catalog item";
+    items.push({ merchant: c.merchant, product: c.product, priceXlm: c.priceXlm });
+  }
+  const sources = Array.isArray(body?.sources) ? body.sources.filter((u) => typeof u === "string" && /^https:\/\/[\w.-]+\.example\//.test(u)).slice(0, 3) : [];
+  return { task: task.trim(), items, sources };
+}
+
 const MAX_MESSAGES = 40;
 const MAX_CHARS = 4000;
 const MAX_TOTAL_CHARS = 40_000;
@@ -170,18 +215,16 @@ export class Limits {
   }
 }
 
-async function callGroq(cfg, messages) {
+async function callGroq(cfg, messages, mode = "chat") {
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(cfg.groqUrl, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${cfg.key}` },
       body: JSON.stringify({
         model: cfg.model,
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-        tools: TOOLS,
-        tool_choice: "auto",
-        temperature: 0.2,
-        max_completion_tokens: 800,
+        ...(mode === "plan"
+          ? { messages: [{ role: "system", content: PLANNER_PROMPT }, ...messages], response_format: { type: "json_object" }, temperature: 0, max_completion_tokens: 1500 }
+          : { messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages], tools: TOOLS, tool_choice: "auto", temperature: 0.2, max_completion_tokens: 800 }),
       }),
       signal: AbortSignal.timeout(45_000),
     });
@@ -232,7 +275,7 @@ export function createRelay(opts = {}) {
       limits.roll();
       return send(res, 200, { ok: true, model: cfg.model, messagesToday: limits.messages, globalDaily: limits.global, perVisitorDaily: limits.perVisitor }, cors);
     }
-    if (req.method !== "POST" || path !== "/chat") return send(res, 404, { error: "not found" }, cors);
+    if (req.method !== "POST" || (path !== "/chat" && path !== "/plan")) return send(res, 404, { error: "not found" }, cors);
     if (origin && !cors["access-control-allow-origin"]) return send(res, 403, { error: "origin not allowed" });
 
     let raw = "";
@@ -246,11 +289,32 @@ export function createRelay(opts = {}) {
     } catch {
       return send(res, 400, { error: "body must be JSON" }, cors);
     }
-    const messages = cleanMessages(body?.messages);
-    if (typeof messages === "string") return send(res, 400, { error: messages }, cors);
-
     const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
     const visitor = (cfg.trustProxy && fwd) || req.socket.remoteAddress || "unknown";
+
+    if (path === "/plan") {
+      const p = cleanPlanRequest(body);
+      if (typeof p === "string") return send(res, 400, { error: p }, cors);
+      const quota = limits.take(visitor, true);
+      if (!quota.ok) return send(res, 429, { error: quota.error }, cors);
+      const user = `Request: ${p.task}\n\nPinned catalog (prices in XLM):\n${p.items.map((i) => `- ${i.merchant} · ${i.product} · ${i.priceXlm}`).join("\n")}\n\nSources the agent may read: ${p.sources.length ? p.sources.join(", ") : "none"}`;
+      try {
+        const m = await callGroq(cfg, [{ role: "user", content: user }], "plan");
+        let out;
+        try {
+          out = JSON.parse(m.content ?? "");
+        } catch {
+          return send(res, 502, { error: "The planner did not return JSON. Try again." }, cors);
+        }
+        return send(res, 200, { say: String(out.say ?? "").slice(0, 300), fields: out.fields ?? {}, plan: Array.isArray(out.plan) ? out.plan : [], messagesLeftToday: quota.left }, cors);
+      } catch (e) {
+        console.error(new Date().toISOString(), "groq plan:", e.message, e.detail ?? "");
+        return send(res, 502, { error: e.message }, cors);
+      }
+    }
+
+    const messages = cleanMessages(body?.messages);
+    if (typeof messages === "string") return send(res, 400, { error: messages }, cors);
     const quota = limits.take(visitor, messages.at(-1).role === "user");
     if (!quota.ok) return send(res, 429, { error: quota.error }, cors);
 
@@ -275,5 +339,5 @@ export function createRelay(opts = {}) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const port = Number(process.env.PORT ?? 8787);
   const host = process.env.HOST ?? "127.0.0.1";
-  createRelay().listen(port, host, () => console.log(`ACAN AI relay on http://${host}:${port} (POST /chat, GET /health)`));
+  createRelay().listen(port, host, () => console.log(`ACAN AI relay on http://${host}:${port} (POST /chat, POST /plan, GET /health)`));
 }

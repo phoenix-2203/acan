@@ -7,3 +7,4 @@ export * from "./merchant-policy.js";
 export * from "./events.js";
 export * from "./receipt.js";
 export * from "./receipt-check.js";
+export * from "./provenance/index.js";

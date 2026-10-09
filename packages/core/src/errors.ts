@@ -35,6 +35,7 @@ export const KNOWN_CODES: Record<number, string> = {
   3408: "PaymentTooLarge: this single payment is above the per-payment limit",
   3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
   3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
+  3213: "NotAllowed: the provenance co-signer did not sign this payment",
 };
 
 /** The contract error code in a simulation or submission error, if any. */
@@ -80,6 +81,7 @@ const REFUSALS: Record<number, Omit<Refusal, "code">> = {
   3002: { title: "No active allowance", policy: "Agent's rule (expiry)", reason: "The agent's rule was revoked or has expired.", severity: "high" },
   3003: { title: "Signature not accepted", policy: "Smart account", reason: "The agent's signature did not verify.", severity: "high" },
   3016: { title: "Key not authorized", policy: "Smart account", reason: "This key is not a signer on the smart account.", severity: "high" },
+  3213: { title: "No provenance co-signature", policy: "Provenance gate", reason: "The agent signed alone. This rule also needs the provenance co-signer, which signs only payments it can trace to your request.", severity: "high" },
   3221: { title: "Over the allowance", policy: "Spending limit", reason: "This payment would take the agent past its allowance for the period.", severity: "medium" },
   3223: { title: "Not a token transfer", policy: "Spending limit", reason: "The agent's rule only allows token transfers.", severity: "high" },
   3224: { title: "Too many payments", policy: "Spending limit", reason: "The spending-limit policy's history for this period is full.", severity: "medium" },

@@ -98,3 +98,32 @@ test("message checks", () => {
   assert.equal(ok.length, 3);
   assert.equal(ok[1].extra, undefined);
 });
+
+test("planner: sees only the request, catalog and source names; returns the plan", async () => {
+  const plan = [{ let: "cat", op: "catalog" }];
+  const g = await fakeGroq([[200, { choices: [{ message: { content: JSON.stringify({ say: "ok", fields: { product: "ledger-report" }, plan }) } }] }]]);
+  const r = await relay(g);
+  try {
+    const post = (body) =>
+      fetch(`${r.base}/plan`, { method: "POST", headers: { "content-type": "application/json", origin: "https://phoenix-2203.github.io" }, body: JSON.stringify(body) });
+    assert.equal((await post({ task: "x", catalog: [] })).status, 400);
+    const res = await post({
+      task: "Buy the cheapest ledger report",
+      catalog: [{ merchant: "Southgate Data", product: "ledger-report", priceXlm: "0.8" }],
+      sources: ["https://tidewire.example/today", "https://real-site.com/x"],
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.plan, plan);
+    assert.deepEqual(body.fields, { product: "ledger-report" });
+    const sent = g.seen[0].body;
+    assert.match(sent.messages[0].content, /You never see the content of any source/);
+    assert.equal(sent.response_format.type, "json_object");
+    assert.equal(sent.tools, undefined);
+    assert.match(sent.messages[1].content, /tidewire\.example/);
+    assert.doesNotMatch(sent.messages[1].content, /real-site\.com/, "only .example demo sources are passed on");
+  } finally {
+    r.close();
+    g.close();
+  }
+});

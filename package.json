@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test packages/core/test/*.test.ts packages/confidential/test/*.test.ts apps/agent/test/*.test.ts apps/mcp/test/*.test.ts apps/web/test/*.test.ts apps/site/test/*.test.ts apps/relay/test/*.test.mjs",
+    "test": "node --import tsx --test packages/core/test/*.test.ts packages/confidential/test/*.test.ts apps/agent/test/*.test.ts apps/mcp/test/*.test.ts apps/web/test/*.test.ts apps/site/test/*.test.ts apps/relay/test/*.test.mjs research/prototype/test/*.test.ts",
     "setup": "tsx scripts/setup.ts",
     "fund:usdc": "tsx scripts/fund-usdc.ts",
     "status": "tsx scripts/status.ts",
