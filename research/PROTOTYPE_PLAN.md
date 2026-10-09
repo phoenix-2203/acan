@@ -213,3 +213,10 @@ type Decision =
 - **The plan language is minimal.** No loops, no Q-LLM. Extraction is a deterministic field read standing in for it.
 - **The user-device key is ed25519 in the prototype.** A browser would more likely use a non-extractable WebCrypto P-256 key. Only the co-signer checks this key, off-chain, so no on-chain verifier would be needed for it.
 - **Not run on testnet.** Two-signer payloads through the x402 facilitator are untested.
+
+
+## 11. Follow-up audit note: bind the plan to the signed request
+
+A separate source review identified that provenance labels alone do not prove a plan followed the signed request. A planner can choose a different item directly from the trusted catalog, making its price and recipient appear untainted. The isolated follow-up branch adds a narrow independent check for the signed `product` and `selection: cheapest` fields and a regression test where a plan ignores the requested product. This is not general intent verification; the production design must constrain plan semantics and recompute permitted choices independently.
+
+**Status as of this note:** patch committed; test execution pending. Do not treat the regression as passing until CI confirms it.
