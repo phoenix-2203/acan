@@ -28,6 +28,8 @@ jobs:
         run: npm run typecheck
       - name: Tests (offline)
         run: npm test
+      - name: Research prototype adversarial tests
+        run: node --import tsx --test research/prototype/test/*.test.ts
       - name: Build the guardian dashboard
         run: npm run build -w @acan/web
       - name: Build the demo site
@@ -46,6 +48,8 @@ jobs:
           workspaces: contracts
       - name: Tests
         run: cargo test --manifest-path contracts/Cargo.toml
+      - name: Research prototype Soroban host tests
+        run: cargo test --manifest-path research/prototype/soroban/Cargo.toml
       - name: Install stellar CLI (same version used for the testnet deploy)
         run: |
           mkdir -p "$HOME/stellar-cli"
