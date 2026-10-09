@@ -48,7 +48,7 @@ export function request(fields: Record<string, string>, overrides: Partial<UserR
     issuedAt: NOW - 10,
     ttlSeconds: 600,
     task: "Buy the cheapest ledger report",
-    fields,
+    fields: { selection: "cheapest", ...fields },
     ...overrides,
   });
 }
@@ -82,6 +82,14 @@ export const PLANS: Record<string, Step[]> = {
     { let: "cat", op: "catalog" },
     { let: "matches", op: "filter", list: "cat", key: "product", equals: "product" },
     ...pick("matches"),
+    { op: "pay", to: "to", amount: "price" },
+  ],
+  /** A hostile planner can ignore the user's product and choose the cheapest item in the entire pinned catalog. */
+  ignoreRequest: [
+    { let: "cat", op: "catalog" },
+    { let: "best", op: "cheapest", list: "cat" },
+    { let: "to", op: "field", from: "best", key: "payTo" },
+    { let: "price", op: "field", from: "best", key: "price" },
     { op: "pay", to: "to", amount: "price" },
   ],
   /** The product is chosen by what the news says (an injection steers it to an allowlisted item). */

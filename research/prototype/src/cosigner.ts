@@ -120,6 +120,28 @@ export class ProvenanceCosigner {
     if (toBad.length) why.push(`recipient depends on ${toBad.join(", ")}`);
     if (amountBad.length) why.push(`amount depends on ${amountBad.join(", ")}`);
     if (ctxBad.length) why.push(`the decision to pay depends on ${ctxBad.join(", ")}`);
+
+    // Provenance alone is insufficient: a hostile planner could ignore the
+    // signed product field and select an entirely different item from the
+    // guardian's pinned catalog. For this prototype, the signed request
+    // explicitly authorizes the cheapest offer for one structured product.
+    // Re-derive that offer independently rather than trusting the plan's
+    // interpretation of the user's task text.
+    if (why.length === 0) {
+      const product = r.fields.product;
+      const selection = r.fields.selection;
+      const offers = this.cfg.catalog.filter((item) =>
+        item.product === product && /^\d+$/.test(item.price) && BigInt(item.price) > 0n
+      );
+      if (!product || selection !== "cheapest" || offers.length === 0) {
+        why.push("signed request has no supported pinned product-selection policy");
+      } else {
+        const cheapest = offers.reduce((best, item) => BigInt(item.price) < BigInt(best.price) ? item : best);
+        if (t.to !== cheapest.payTo || t.amount !== BigInt(cheapest.price)) {
+          why.push("payment does not match the signed product/selection policy");
+        }
+      }
+    }
     if (why.length) return { verdict: "escalate", why, caseHash, transfer: t };
 
     // 6. Idempotent for the same entry; otherwise within the request's budget.
