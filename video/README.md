@@ -27,7 +27,7 @@ node stills.mjs 4 14 30 58 99 133      # check frames
 node render.mjs 30 0 155 ../renders/film-v2-silent.mp4
 python3 voice/synth.py af_heart <dir>   # writes the narration wavs and their timings
 python3 voice/mix.py <dir> voice/timing.json ../renders/soundtrack-v2.wav
-ffmpeg -i ../renders/film-v2-silent.mp4 -i ../renders/soundtrack-v2.wav -c:v copy -c:a aac -b:a 192k -shortest ../renders/ACAN_v2_Hackathon_Master.mp4
+ffmpeg -i ../renders/film-v2-silent.mp4 -i ../renders/soundtrack-v2.wav -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 48000 -c:a aac -b:a 192k -shortest ../renders/ACAN_v2_Hackathon_Master.mp4
 ```
 
 ## How the v1 UI captures were made
