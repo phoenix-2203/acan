@@ -131,7 +131,7 @@ export class ProvenanceCosigner {
       const product = r.fields.product;
       const selection = r.fields.selection;
       const offers = this.cfg.catalog.filter((item) =>
-        item.product === product && /^\\d+$/.test(item.price) && BigInt(item.price) > 0n
+        item.product === product && /^\d+$/.test(item.price) && BigInt(item.price) > 0n
       );
       if (!product || selection !== "cheapest" || offers.length === 0) {
         why.push("signed request has no supported pinned product-selection policy");
