@@ -1,4 +1,7 @@
-import { REPO_URL } from "../deployment";
+import { useMemo } from "react";
+import { ASSETS } from "@acan/core/browser";
+import { AccountView } from "../AccountView";
+import { DEPLOYMENT, REPO_URL } from "../deployment";
 import { Icon, Tx } from "../ui";
 
 export function ProvenanceLearn() {
@@ -200,6 +203,7 @@ export function SecurityLearn() {
 
 export function ProofLearn() {
   return (
+    <div className="stack">
     <div className="ap-card">
       <p className="muted">Runs of the full stack (AI agent, x402 merchants, guardian dashboard), with their transactions on Stellar testnet.</p>
       <div className="table-wrap">
@@ -211,6 +215,12 @@ export function ProofLearn() {
                 </tr>
               </thead>
               <tbody>
+                <tr>
+                  <td>Provenance gate: Autopilot's “buy the cheapest ledger report” co-signed and paid; the injected Tidewire task held, and the agent's key alone refused by the smart account (#3213)</td>
+                  <td>
+                    <Tx hash="c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a" /> (the co-signed payment)
+                  </td>
+                </tr>
                 <tr>
                   <td>AI agent (Groq) compares two x402 merchants and buys each item from the cheaper one</td>
                   <td>
@@ -269,6 +279,8 @@ export function ProofLearn() {
             </table>
           </div>
     </div>
+    <LiveAccount />
+    </div>
   );
 }
 
@@ -290,5 +302,110 @@ npm run agent:ai       # the AI agent shops within its allowance
 npm run mcp            # or: let any MCP client (Claude Desktop, Cursor) shop with it`}</code>
       </pre>
     </div>
+  );
+}
+
+export function PrivacyLearn() {
+  const steps: [string, string, string][] = [
+    ["Top-up from the smart account, through the agent's capped rule", "3544896310c5f3600ddc3b086e25b0c8d09e086242e1d5c44d560f2a7870dd4a", "0.10 USDC (a fixed-size chunk)"],
+    ["Deposit into the confidential balance", "17229ad5e96a4015c7d5c6fa486e1999e6f06ff4115885ddccfdd935e7754193", "0.10 USDC"],
+    ["Settlement after requests 1–3", "0f466ad20ddbaca87ccb7c953f0d74648c4ea32525a151307a18af9d3a96c7ec", "vault → merchant, amount hidden"],
+    ["Settlement after requests 4–6", "57924ba11591129f8cb3389a6d5eb538d1fa1cdbecd8d7e85a516afb2415ba96", "vault → merchant, amount hidden"],
+    ["Tab closed after request 7", "70b5dec854e3cf715041fa791fdcb2fae066ae7ea6a17ca9e1b7e8a1ad507014", "vault → merchant, amount hidden"],
+  ];
+  return (
+    <div className="stack">
+      <div className="card-grid">
+        <section className="ap-card">
+          <span className="mono muted">01</span>
+          <h3>A voucher per request, not a transaction</h3>
+          <p className="muted">
+            In private mode the agent pays each request with a signed voucher. Vouchers are chained (each one states the running total), so the
+            merchant always holds one signed statement of the debt. No transaction, no fee, nothing on-chain per request.
+          </p>
+        </section>
+        <section className="ap-card">
+          <span className="mono muted">02</span>
+          <h3>Settled in confidential transfers</h3>
+          <p className="muted">
+            When the tab reaches its credit limit, the agent pays it in one confidential transfer. Balances are commitments and every transfer
+            carries a zero-knowledge proof that is verified on-chain. The public sees “vault → merchant”, not how much.
+          </p>
+        </section>
+        <section className="ap-card">
+          <span className="mono muted">03</span>
+          <h3>Still inside your limits, and you can audit it</h3>
+          <p className="muted">
+            The private vault can only be filled through the agent's capped rule, so privacy does not loosen your allowance. Every transfer
+            also carries ciphertexts for your auditor key: you see exactly what was spent; the public does not.
+          </p>
+        </section>
+      </div>
+      <section className="ap-card">
+        <h3>Run on Stellar testnet: 7 paid requests, 0 per-request transactions, 3 confidential settlements</h3>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Transaction</th>
+                <th>What the public sees</th>
+              </tr>
+            </thead>
+            <tbody>
+              {steps.map(([what, hash, seen]) => (
+                <tr key={hash}>
+                  <td>{what}</td>
+                  <td>
+                    <Tx hash={hash} />
+                  </td>
+                  <td>{seen}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="label" style={{ marginTop: 16 }}>
+          What the guardian sees (decrypted with the auditor key)
+        </p>
+        <pre>
+          <code>{`transfer agent-vault → merchant  0.03 USDC   vault balance after: 0.07 USDC
+transfer agent-vault → merchant  0.03 USDC   vault balance after: 0.04 USDC
+transfer agent-vault → merchant  0.01 USDC   vault balance after: 0.03 USDC`}</code>
+        </pre>
+        <p className="muted small">
+          Private mode runs from the full stack (<code>npm run agent:private</code>, then <code>npm run audit</code>), because the zero-knowledge
+          proofs are made on the agent's machine; it is not part of this browser sandbox. What it does not hide: who pays whom, and the
+          top-ups into the vault. The confidential token is built on an unaudited OpenZeppelin preview; testnet only.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+export function LiveAccount() {
+  const names = useMemo(() => {
+    const n: Record<string, string> = { [DEPLOYMENT.agent]: "Agent" };
+    for (const m of DEPLOYMENT.merchants) n[m.address] = m.name;
+    if (DEPLOYMENT.agentVault) n[DEPLOYMENT.agentVault] = "Agent's private vault";
+    return n;
+  }, []);
+  return (
+    <section className="ap-card">
+      <h3>ACAN's own wallet, live</h3>
+      <p className="muted">
+        The wallet behind the runs above: a passkey smart account whose rule #{DEPLOYMENT.agentRuleId} is the command-line AI agent's USDC
+        allowance, with the merchant budget policy attached. It is read from testnet now; nothing here is staged.
+      </p>
+      <AccountView
+        account={DEPLOYMENT.smartAccount}
+        token={ASSETS.usdc.sac}
+        tokenLabel="USDC"
+        names={names}
+        merchantPolicy={DEPLOYMENT.merchantPolicy}
+        focusRule={DEPLOYMENT.agentRuleId}
+        historyLedgers={120_000}
+      />
+    </section>
   );
 }

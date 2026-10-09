@@ -1,13 +1,16 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import {
   checkPaymentOnChain,
   checkReceiptOffline,
+  explainReceipt,
   parseSignedReceipt,
   type ReceiptCheck,
   type SignedReceipt,
 } from "@acan/core/browser";
 import { explorer, server, short } from "./chain";
+import { downloadReceipt } from "./receipt-build";
+import { useStore } from "./store";
 
 /**
  * "Check a receipt": open a task receipt the agent signed, see it as a receipt,
@@ -24,6 +27,12 @@ export function ReceiptSection() {
   const [saving, setSaving] = useState(false);
   const card = useRef<HTMLDivElement>(null);
   const run = useRef(0);
+  const store = useStore();
+  const latest = store.receipt;
+
+  useEffect(() => {
+    if (latest) void check(latest, "your last Autopilot task");
+  }, [latest]);
 
   async function open(file: File) {
     setError(null);
@@ -36,15 +45,20 @@ export function ReceiptSection() {
     } catch (e) {
       return setError(e instanceof Error ? e.message : String(e));
     }
+    await check(s, file.name);
+  }
+
+  async function check(s: SignedReceipt, name: string) {
+    setError(null);
     setSigned(s);
-    setFileName(file.name);
+    setFileName(name);
     const id = ++run.current;
-    const offline = checkReceiptOffline(s);
+    const offline = [...checkReceiptOffline(s), ...explainReceipt(s)];
     setChecks(offline);
     setChecking(true);
     const all = [...offline];
     for (const [i, p] of s.receipt.payments.entries()) {
-      const c = await checkPaymentOnChain(server, s.receipt.smartAccount, p, i);
+      const c = await checkPaymentOnChain(server, s.receipt.smartAccount, p, i, s.receipt.asset);
       if (id !== run.current) return;
       all.push(c);
       setChecks([...all]);
@@ -72,10 +86,28 @@ export function ReceiptSection() {
 
   const failed = checks.filter((c) => c.status === "fail").length;
   const verdict = !signed ? null : checking ? "checking" : failed ? "failed" : "verified";
-  const paymentCheck = (i: number) => checks.find((c) => c.payment === i);
+  // A line's tick: failed if any of its checks failed; ok once its on-chain check (the last one) is in.
+  const paymentCheck = (i: number) => {
+    const mine = checks.filter((c) => c.payment === i);
+    return mine.find((c) => c.status === "fail") ?? (mine.some((c) => c.text.includes(" moved ") || c.status === "skip") ? mine.at(-1) : undefined);
+  };
 
   return (
     <div className="receipt-tool">
+      {!signed && (
+        <div className="callout">
+          <div>
+            <b>Get a receipt by running a task.</b>
+            <p className="muted small">
+              Every Autopilot task ends with a receipt signed by the agent: what it paid, what was held and why. It also carries what is
+              needed to re-run the co-signer's decisions, so anyone can check not only what was paid but why it was allowed.
+            </p>
+            <a className="button small" href="#/app/autopilot">
+              Run a task in Autopilot
+            </a>
+          </div>
+        </div>
+      )}
       <label
         className={`dropzone ${dragging ? "over" : ""}`}
         onDragOver={(e) => {
@@ -100,8 +132,8 @@ export function ReceiptSection() {
             e.target.value = "";
           }}
         />
-        <b>{signed ? "Open another receipt" : "Choose a receipt file"}</b>
-        <span className="muted small">or drop it here. The dashboard's Task receipt → Download saves one as acan-receipt-….json. It is read in this browser and never uploaded.</span>
+        <b>{signed ? "Check another receipt file" : "Check a receipt file"}</b>
+        <span className="muted small">Drop an acan-receipt-….json here or click to choose one. It is checked in this browser and never uploaded.</span>
       </label>
       {error && <div className="status bad">{error}</div>}
 
@@ -158,9 +190,9 @@ export function ReceiptSection() {
             {signed.receipt.blocked.map((b, i) => (
               <div className="paper-line blocked" key={`b${i}`}>
                 <div className="paper-item">
-                  <span>Blocked: {b.recipient}</span>
+                  <span>{b.held ? "Held" : "Blocked"}: {b.recipient}</span>
                   <span className="small">
-                    {b.policy}
+                    {b.held ? b.held.why.join("; ") : b.policy}
                     {b.code !== null ? ` (#${b.code})` : ""} · no funds moved
                   </span>
                 </div>
@@ -172,17 +204,19 @@ export function ReceiptSection() {
             <div className="paper-rule" />
             <div className="paper-total">
               <span>Total spent</span>
-              <span className="mono">{signed.receipt.totals.spentUsdc} USDC</span>
+              <span className="mono">
+                {signed.receipt.totals.spentUsdc} {signed.receipt.asset?.code ?? "USDC"}
+              </span>
             </div>
             <div className="paper-sub muted small">
               {signed.receipt.totals.payments} payment(s) · {signed.receipt.totals.blocked} blocked · {signed.receipt.totals.guardianApprovals} passkey
               approval(s)
-              {signed.receipt.allowance ? ` · allowance left ${signed.receipt.allowance.leftAtEndUsdc} of ${signed.receipt.allowance.limitUsdc} USDC` : ""}
+              {signed.receipt.allowance ? ` · allowance left ${signed.receipt.allowance.leftAtEndUsdc} of ${signed.receipt.allowance.limitUsdc} ${signed.receipt.asset?.code ?? "USDC"}` : ""}
             </div>
             <div className={`stamp ${verdict}`}>
               {verdict === "verified" ? "Verified on Stellar testnet" : verdict === "failed" ? "Does not check out" : "Checking on testnet…"}
             </div>
-            <p className="paper-foot mono">signed by {short(signed.signer, 6)} · check the signed file at acan-demo.duckdns.org/#receipt</p>
+            <p className="paper-foot mono">signed by {short(signed.signer, 6)} · check the file at acan-demo.duckdns.org/#/app/receipts</p>
           </div>
 
           <div className="checks">
@@ -198,11 +232,18 @@ export function ReceiptSection() {
             </ul>
             <p className="muted small">
               The signature covers every field, so changing any amount, merchant or transaction makes it fail. Each payment is matched to a
-              USDC transfer from the smart account on testnet. {fileName && <span className="mono">({fileName})</span>}
+              transfer from the smart account on testnet.
+              {signed.receipt.provenance ? " The co-signer's decisions are re-run here from the receipt alone: same request, same plan, same content read, same pinned catalog." : ""}{" "}
+              {fileName && <span className="mono">({fileName})</span>}
             </p>
-            <button onClick={saveImage} disabled={saving || checking}>
-              {saving ? "Making the image…" : "Save as image"}
-            </button>
+            <div className="row">
+              <button onClick={saveImage} disabled={saving || checking}>
+                {saving ? "Making the image…" : "Save as image"}
+              </button>
+              <button className="secondary" onClick={() => downloadReceipt(signed)}>
+                Download the file
+              </button>
+            </div>
           </div>
         </div>
       )}

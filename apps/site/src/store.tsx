@@ -4,7 +4,7 @@
  * this browser against Stellar testnet.
  */
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { explainRefusal, type Refusal, type SignedRequest, type Step } from "@acan/core/browser";
+import { explainRefusal, type Refusal, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
 import { SandboxAgent, type PayResult } from "./ai-agent";
 import { latestLedger, short, spendingLimit, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
@@ -69,6 +69,9 @@ interface Store {
   /** After a revoke: grant a new allowance on the same wallet. */
   newGrant: () => void;
   reset: () => void;
+  /** The signed receipt of the last Autopilot task (opened on the Receipts page). */
+  receipt: SignedReceipt | null;
+  setReceipt: (r: SignedReceipt | null) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -98,6 +101,7 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<LogLine[]>([]);
   const [refresh, setRefresh] = useState(0);
+  const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
   const seq = useRef(0);
   const contractRef = useRef(contractId);
   contractRef.current = contractId;
@@ -264,6 +268,8 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
         setGrant(sb().grant);
         add("info", `Rule #${id} deleted with your passkey. The agent's key now authorizes nothing.`);
       }),
+    receipt,
+    setReceipt,
     newGrant: () => {
       if (busy) return;
       sb().clearGrant();

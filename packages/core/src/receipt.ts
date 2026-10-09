@@ -22,6 +22,12 @@ export interface ReceiptPayment {
   /** Voucher reference, for private payments. */
   voucher?: string;
   approvedByGuardian?: boolean;
+  /** Provenance-gated payments: which `pay` of the receipt's plan this was. */
+  payIndex?: number;
+  /** The unsigned authorization entry the co-signer reviewed (base64 XDR). */
+  authEntry?: string;
+  /** The provenance co-signer's signature over that entry's auth digest (hex). */
+  cosignature?: string;
 }
 
 export interface ReceiptBlocked {
@@ -30,6 +36,8 @@ export interface ReceiptBlocked {
   amountUsdc?: string;
   policy: string;
   code: number | null;
+  /** Held by the provenance co-signer: which `pay` of the plan, and why (as the co-signer said). */
+  held?: { payIndex: number; why: string[] };
 }
 
 export interface TaskReceipt {
@@ -48,6 +56,23 @@ export interface TaskReceipt {
   merchants: { merchant: string; address?: string; spentUsdc: string; payments: number }[];
   payments: ReceiptPayment[];
   blocked: ReceiptBlocked[];
+  /** The token paid in; USDC when absent. Amount fields named *Usdc then hold amounts in this asset. */
+  asset?: { code: string; sac: string };
+  /**
+   * Explainable receipts: everything needed to re-run the provenance
+   * co-signer's decision for every payment and every hold.
+   */
+  provenance?: {
+    /** The user's request, signed on their device. */
+    request: { request: Record<string, unknown>; publicKey: string; signature: string };
+    plan: unknown[];
+    transcript: Record<string, string>;
+    /** The price book the guardian pinned for the co-signer. */
+    catalog: { merchant: string; product: string; price: string; payTo: string }[];
+    /** The co-signer's public key (G...). */
+    cosigner: string;
+    networkPassphrase: string;
+  };
 }
 
 export interface SignedReceipt {

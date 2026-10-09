@@ -1,6 +1,4 @@
-import { useMemo, type ReactNode } from "react";
-import { ASSETS } from "@acan/core/browser";
-import { AccountView } from "./AccountView";
+import { type ReactNode } from "react";
 import { Activity } from "./Activity";
 import { AiChat } from "./AiChat";
 import { DEPLOYMENT, REPO_URL } from "./deployment";
@@ -8,7 +6,7 @@ import { ReceiptSection } from "./ReceiptSection";
 import { useStore } from "./store";
 import { Icon, VIEWS } from "./ui";
 import { AutopilotView } from "./views/Autopilot";
-import { HowLearn, ProofLearn, ProvenanceLearn, RunLearn, SecurityLearn } from "./views/Learn";
+import { HowLearn, PrivacyLearn, ProofLearn, ProvenanceLearn, RunLearn, SecurityLearn } from "./views/Learn";
 import { WalletView } from "./views/Wallet";
 
 const INTRO: Record<string, string> = {
@@ -17,11 +15,13 @@ const INTRO: Record<string, string> = {
   wallet: "Everything runs in your browser against Stellar testnet. The refusals you see are real contract errors, not checks in this page.",
   agent: "The agent proposes, you pick, and your smart account has the final word. Try to talk it into paying a stranger.",
   live: `ACAN's own guardian account, read from testnet now. Rule #${DEPLOYMENT.agentRuleId} is the AI agent's allowance, in USDC, with the merchant budget policy attached.`,
-  receipts: "After a task the agent signs a receipt of what it spent and what was blocked. Open one to check the signature, the totals and every payment against the chain.",
+  receipts:
+    "Every Autopilot task ends with a receipt the agent signs. Here anyone can check it: the signature, every payment on testnet, and why each payment was allowed or held, re-run from the receipt itself.",
   provenance: "Why a manipulated agent can't pay, even when the payment is inside every limit.",
   how: "The parts of ACAN and how they fit.",
   security: "Each row is covered by a test in the repository or by an on-chain policy.",
-  proof: "Every claim on this site, with its transaction.",
+  proof: "Every claim on this site, with its transaction, and ACAN's own wallet read live from testnet.",
+  privacy: "In private mode the agent's payments are vouchers, settled in confidential transfers whose amounts are hidden on-chain. You still see everything with your auditor key.",
   run: "Run the whole stack locally against testnet.",
 };
 
@@ -29,7 +29,7 @@ const INTRO: Record<string, string> = {
 const WITH_ACTIVITY = new Set(["autopilot", "wallet", "agent"]);
 
 export function Shell({ view }: { view: string }) {
-  const v = VIEWS.find((x) => x.id === view) ?? VIEWS[0];
+  const v = VIEWS.find((x) => x.id === (view === "live" ? "proof" : view)) ?? VIEWS[0];
   return (
     <div className="shell">
       <aside className="rail">
@@ -90,7 +90,10 @@ function body(id: string): ReactNode {
     case "agent":
       return <AgentView />;
     case "live":
-      return <LiveView />;
+    case "proof":
+      return <ProofLearn />;
+    case "privacy":
+      return <PrivacyLearn />;
     case "receipts":
       return <ReceiptSection />;
     case "provenance":
@@ -99,8 +102,6 @@ function body(id: string): ReactNode {
       return <HowLearn />;
     case "security":
       return <SecurityLearn />;
-    case "proof":
-      return <ProofLearn />;
     case "run":
       return <RunLearn />;
     default:
@@ -127,25 +128,5 @@ function AgentView() {
       )}
       <AiChat agent={s.ai} attacker={s.contractId ? s.sb().attacker.publicKey() : "G…"} disabled={!!s.busy || s.step !== 3} />
     </div>
-  );
-}
-
-function LiveView() {
-  const names = useMemo(() => {
-    const n: Record<string, string> = { [DEPLOYMENT.agent]: "Agent" };
-    for (const m of DEPLOYMENT.merchants) n[m.address] = m.name;
-    if (DEPLOYMENT.agentVault) n[DEPLOYMENT.agentVault] = "Agent's private vault";
-    return n;
-  }, []);
-  return (
-    <AccountView
-      account={DEPLOYMENT.smartAccount}
-      token={ASSETS.usdc.sac}
-      tokenLabel="USDC"
-      names={names}
-      merchantPolicy={DEPLOYMENT.merchantPolicy}
-      focusRule={DEPLOYMENT.agentRuleId}
-      historyLedgers={120_000}
-    />
   );
 }

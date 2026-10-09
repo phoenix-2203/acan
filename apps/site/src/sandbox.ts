@@ -95,7 +95,7 @@ interface Saved {
 }
 
 export type Outcome =
-  | { ok: true; tx: string }
+  | { ok: true; tx: string; authEntry?: string; cosignature?: string }
   | { ok: false; refused: boolean; code: number | null; reason: string; why?: string[]; verdict?: "escalate" | "reject" };
 
 /** What the autonomous agent asks the co-signer to back: the request, the plan, what it read, and which payment. */
@@ -356,6 +356,7 @@ export class Sandbox {
       networkPassphrase: TESTNET.networkPassphrase,
     });
     const service = this.service();
+    let seen: { authEntry: string; cosignature: string } | undefined;
     try {
       const tx = await gatedSmartAccountTransfer({
         signer,
@@ -365,11 +366,14 @@ export class Sandbox {
         token: XLM,
         cosign: async (authEntry) => {
           const d = service.review({ ...c, authEntry });
-          if (d.verdict === "cosign") return { ok: true, signature: d.signature };
+          if (d.verdict === "cosign") {
+            seen = { authEntry, cosignature: d.signature.signature.toString("hex") };
+            return { ok: true, signature: d.signature };
+          }
           return { ok: false, verdict: d.verdict, why: d.verdict === "escalate" ? d.why : [d.reason] };
         },
       });
-      return { ok: true, tx };
+      return { ok: true, tx, ...seen };
     } catch (e) {
       if (e instanceof ProvenanceEscalation) return { ok: false, refused: false, code: null, reason: e.message, why: e.why, verdict: e.verdict };
       let refused = false;

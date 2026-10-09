@@ -49,6 +49,7 @@ export function usdcTransfers(meta: xdr.TransactionMeta, sac: string = ASSETS.us
 export function checkReceiptOffline(signed: SignedReceipt): ReceiptCheck[] {
   const r = signed.receipt;
   const sum = addUsdc(r.payments.map((p) => p.amountUsdc));
+  const code = r.asset?.code ?? "USDC";
   return [
     {
       status: verifyReceiptSignature(signed) ? "ok" : "fail",
@@ -60,19 +61,26 @@ export function checkReceiptOffline(signed: SignedReceipt): ReceiptCheck[] {
       status: sum === r.totals.spentUsdc ? "ok" : "fail",
       text:
         sum === r.totals.spentUsdc
-          ? `Total spent ${r.totals.spentUsdc} USDC matches its ${r.payments.length} payment line(s)`
-          : `Total says ${r.totals.spentUsdc} USDC, but the payment lines add up to ${sum} USDC`,
+          ? `Total spent ${r.totals.spentUsdc} ${code} matches its ${r.payments.length} payment line(s)`
+          : `Total says ${r.totals.spentUsdc} ${code}, but the payment lines add up to ${sum} ${code}`,
     },
   ];
 }
 
 /** Check one payment line against the chain. */
-export async function checkPaymentOnChain(server: rpc.Server, smartAccount: string, p: ReceiptPayment, index: number): Promise<ReceiptCheck> {
+export async function checkPaymentOnChain(
+  server: rpc.Server,
+  smartAccount: string,
+  p: ReceiptPayment,
+  index: number,
+  asset: { code: string; sac: string } = { code: "USDC", sac: ASSETS.usdc.sac },
+): Promise<ReceiptCheck> {
+  const code = asset.code;
   if (!p.tx) {
     return {
       status: "skip",
       payment: index,
-      text: `${p.amountUsdc} USDC to ${p.merchant}: a private voucher, settled confidentially later, so it has no transaction of its own`,
+      text: `${p.amountUsdc} ${code} to ${p.merchant}: a private voucher, settled confidentially later, so it has no transaction of its own`,
     };
   }
   const short = `${p.tx.slice(0, 8)}…`;
@@ -92,16 +100,16 @@ export async function checkPaymentOnChain(server: rpc.Server, smartAccount: stri
           : `${short} did not succeed`,
     };
   }
-  const moved = usdcTransfers(t.resultMetaXdr).find((x) => x.from === smartAccount && (!p.address || x.to === p.address));
+  const moved = usdcTransfers(t.resultMetaXdr, asset.sac).find((x) => x.from === smartAccount && (!p.address || x.to === p.address));
   const ok = Boolean(moved && stroopsToUsdc(moved.amount) === p.amountUsdc);
   return {
     status: ok ? "ok" : "fail",
     payment: index,
     text: ok
-      ? `${short} moved ${p.amountUsdc} USDC from the smart account to ${p.merchant}`
+      ? `${short} moved ${p.amountUsdc} ${code} from the smart account to ${p.merchant}`
       : moved
-        ? `${short} moved ${stroopsToUsdc(moved.amount)} USDC, but the receipt says ${p.amountUsdc}`
-        : `${short} has no USDC transfer from the smart account${p.address ? " to that recipient" : ""}`,
+        ? `${short} moved ${stroopsToUsdc(moved.amount)} ${code}, but the receipt says ${p.amountUsdc}`
+        : `${short} has no ${code} transfer from the smart account${p.address ? " to that recipient" : ""}`,
   };
 }
 

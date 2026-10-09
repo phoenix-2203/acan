@@ -4,6 +4,7 @@ import { units } from "../chain";
 import { DEPLOYMENT } from "../deployment";
 import { TIDEWIRE_NOTE, TIDEWIRE_URL } from "../merchants";
 import { plan as askPlanner, pinnedCatalog, preview, sourceName, type PlanReply, type Preview } from "../provenance-agent";
+import { buildTaskReceipt, downloadReceipt, type TaskLine } from "../receipt-build";
 import { useStore } from "../store";
 import { Icon } from "../ui";
 
@@ -55,17 +56,22 @@ export function AutopilotView() {
     const request: SignedRequest = s.sb().signRequest(task, fields);
     s.add("info", `You signed the request on this device: “${task}”`);
     const out: { ok: boolean; text: string }[] = [];
+    const lines: TaskLine[] = [];
+    const startedAt = new Date().toISOString();
     await s.run("The agent is working…", async () => {
       for (const [i, p] of pv.pays.entries()) {
         const to = String(p.to.v);
         const amount = BigInt(String(p.amount.v));
         s.setBusy(`Payment ${i + 1}: asking the provenance co-signer…`);
         const r = await s.payFromPlan(request, reply.plan, i, to, amount);
+        const merchant = s.names[to] ?? to;
+        lines.push(r.ok ? { payIndex: i, to, amount, merchant, ok: true, tx: r.tx, authEntry: r.authEntry, cosignature: r.cosignature } : { payIndex: i, to, amount, merchant, ok: false, why: r.why });
         out.push({
           ok: r.ok,
-          text: r.ok ? `Paid ${units(amount)} XLM to ${s.names[to] ?? to}` : r.why ? `Held: ${units(amount)} XLM to ${s.names[to] ?? to} did not trace back to you` : `Not paid: ${r.reason}`,
+          text: r.ok ? `Paid ${units(amount)} XLM to ${merchant}` : r.why ? `Held: ${units(amount)} XLM to ${merchant} did not trace back to you` : `Not paid: ${r.reason}`,
         });
       }
+      if (lines.length) s.setReceipt(buildTaskReceipt(s.sb(), request, reply.plan, catalog, lines, startedAt));
     });
     setResults(out);
     setPhase("done");
@@ -187,9 +193,21 @@ export function AutopilotView() {
                   </p>
                 ))}
                 <p className="muted small">Details, and what you can do about a held payment, are in the activity log.</p>
-                <button className="secondary small" onClick={reset}>
-                  New task
-                </button>
+                <div className="row">
+                  {s.receipt && (
+                    <>
+                      <a className="button small" href="#/app/receipts">
+                        Open the receipt
+                      </a>
+                      <button className="secondary small" onClick={() => downloadReceipt(s.receipt!)}>
+                        Download it
+                      </button>
+                    </>
+                  )}
+                  <button className="secondary small" onClick={reset}>
+                    New task
+                  </button>
+                </div>
               </div>
             )}
           </section>

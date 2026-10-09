@@ -38,6 +38,12 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   pulse: <path d="M3 12h4l2.5-6 5 12L17 12h4" />,
+  eye: (
+    <>
+      <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
   receipt: (
     <>
       <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
@@ -121,9 +127,9 @@ export const VIEWS: AppView[] = [
   { id: "autopilot", group: "Try", title: "Autopilot", icon: "trace", blurb: "An agent that pays on its own, only for what traces back to you", isNew: true },
   { id: "wallet", group: "Try", title: "Wallet & allowance", icon: "wallet", blurb: "Create a passkey wallet and give an agent a capped allowance" },
   { id: "agent", group: "Try", title: "AI agent", icon: "bot", blurb: "Chat with an agent that spends from your wallet; try to trick it" },
-  { id: "live", group: "Try", title: "Live account", icon: "pulse", blurb: "ACAN's own USDC account and rule, read from testnet" },
-  { id: "receipts", group: "Try", title: "Receipts", icon: "receipt", blurb: "Check a signed task receipt against the chain" },
+  { id: "receipts", group: "Try", title: "Receipts", icon: "receipt", blurb: "Every task’s receipt: what was paid, and why it was allowed" },
   { id: "provenance", group: "Learn", title: "Provenance gate", icon: "key", blurb: "Why a tricked agent can't pay, even inside its limits", isNew: true },
+  { id: "privacy", group: "Learn", title: "Private payments", icon: "eye", blurb: "Vouchers and confidential settlement: amounts hidden on-chain" },
   { id: "how", group: "Learn", title: "How it works", icon: "layers", blurb: "Smart account, policies, x402, private mode, MCP" },
   { id: "security", group: "Learn", title: "Security", icon: "shield", blurb: "Defences against published x402 attacks" },
   { id: "proof", group: "Learn", title: "Proof on testnet", icon: "proof", blurb: "Every claim, with its transaction" },

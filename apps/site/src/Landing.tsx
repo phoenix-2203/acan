@@ -26,14 +26,14 @@ const FEATURES = [
     title: "x402 straight from the smart account, or private.",
     body:
       "The agent pays any x402 merchant in USDC under its rule. In private mode it pays with signed vouchers and settles in confidential transfers whose amounts are hidden on-chain; your auditor key reads them.",
-    go: "how",
-    cta: "How payments work",
+    go: "privacy",
+    cta: "See private payments",
     icon: "layers",
   },
   {
     tag: "Audit",
-    title: "Receipts anyone can check.",
-    body: "After a task the agent signs a receipt of what it paid and what was blocked. Anyone can verify the signature and every payment against the chain.",
+    title: "Receipts that show why, not just what.",
+    body: "Every Autopilot task ends with a receipt the agent signs: what it paid, what was held, and everything needed to re-run the co-signer's decisions. Anyone can check the signature, every payment on-chain, and why each one was allowed.",
     go: "receipts",
     cta: "Check a receipt",
     icon: "receipt",
@@ -49,8 +49,8 @@ const FEATURES = [
 ];
 
 const PROOF = [
+  { what: "Provenance gate: Autopilot payment co-signed and paid", hash: "c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a" },
   { what: "x402 payment in USDC from the smart account", hash: "4394246d34c0d491671d9c76ba78f8785c0c377054d62f6038ce0456a13aaf6a" },
-  { what: "Allowance used up: the next payment refused on-chain", hash: "505d1ca29d4c1427e20782a700dca548e4f0a6c90ce7312ba1269d92104378f4" },
   { what: "Blocked payment approved once with a passkey", hash: "faf52259371a1f83487594e95a95d742073ab9ef7875908e4d9d631c37750b1d" },
   { what: "Private mode: confidential settlement, amount hidden", hash: "0f466ad20ddbaca87ccb7c953f0d74648c4ea32525a151307a18af9d3a96c7ec" },
 ];
