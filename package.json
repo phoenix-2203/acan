@@ -38,7 +38,9 @@
     "demo:caps": "tsx scripts/demo-caps.ts",
     "merchant:cashout": "tsx scripts/merchant-cashout.ts",
     "ct:build": "cd vendor/ctd-demo && pnpm install && pnpm build:sdk",
-    "test:contracts": "cd contracts && cargo test"
+    "test:contracts": "cd contracts && cargo test",
+    "test:research": "node --import tsx --test research/prototype/test/*.test.ts && cd research/prototype/soroban && cargo test",
+    "research:demo": "tsx research/prototype/scripts/demo.ts"
   },
   "overrides": {
     "@stellar/stellar-sdk": "16.3.1"
