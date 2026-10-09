@@ -66,6 +66,8 @@ interface Store {
   approveOnce: (line: LogLine) => Promise<void>;
   settle: (id: number, settled: "approved" | "denied") => void;
   revoke: () => Promise<void>;
+  /** After a revoke: grant a new allowance on the same wallet. */
+  newGrant: () => void;
   reset: () => void;
 }
 
@@ -262,6 +264,11 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
         setGrant(sb().grant);
         add("info", `Rule #${id} deleted with your passkey. The agent's key now authorizes nothing.`);
       }),
+    newGrant: () => {
+      if (busy) return;
+      sb().clearGrant();
+      setGrant(undefined);
+    },
     reset: () => {
       if (busy) return;
       Sandbox.reset();

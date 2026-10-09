@@ -406,6 +406,13 @@ export class Sandbox {
     save(this.state);
   }
 
+  /** After a revoke: forget the old rule so a new allowance can be granted on the same wallet. */
+  clearGrant(): void {
+    this.state.grant = undefined;
+    this.cosignerService = undefined;
+    save(this.state);
+  }
+
   /** Is the agent's rule still on the account? */
   async ruleExists(): Promise<boolean> {
     const g = this.state.grant;

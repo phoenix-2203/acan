@@ -94,8 +94,8 @@ export function AutopilotView() {
                 : s.step === 2
                   ? "Give the agent an allowance with “Provenance gate” ticked."
                   : g && !g.gated
-                    ? "This allowance was granted without the gate. Revoke it and grant a new one with “Provenance gate” ticked."
-                    : "The allowance was revoked. Grant a new one."}
+                    ? "This allowance was granted without the gate. Revoke it, then press “Grant a new allowance” and keep “Provenance gate” ticked."
+                    : "The allowance was revoked. Press “Grant a new allowance” in step 4 and keep “Provenance gate” ticked."}
             </p>
             <a className="button small" href="#/app/wallet">
               Go to Wallet & allowance

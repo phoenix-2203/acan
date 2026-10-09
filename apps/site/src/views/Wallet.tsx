@@ -230,9 +230,14 @@ export function WalletView() {
             </button>
           )}
           {step === 4 && (
-            <button className="secondary" onClick={() => s.run("The agent is paying…", async () => void (await s.pay(`try ${north.name} again after being revoked`, north.address, 10_000_000n)))} disabled={busy}>
-              Make the agent try again
-            </button>
+            <div className="row">
+              <button className="secondary" onClick={() => s.run("The agent is paying…", async () => void (await s.pay(`try ${north.name} again after being revoked`, north.address, 10_000_000n)))} disabled={busy}>
+                Make the agent try again
+              </button>
+              <button onClick={s.newGrant} disabled={busy}>
+                Grant a new allowance
+              </button>
+            </div>
           )}
         </li>
       </ol>
