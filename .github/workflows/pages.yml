@@ -11,6 +11,7 @@ on:
       - "packages/core/src/**"
       - "deployments/**"
       - ".github/workflows/pages.yml"
+      - "package-lock.json"
   workflow_dispatch:
 
 permissions:
