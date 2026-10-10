@@ -12,6 +12,34 @@ import {
 import { ASSETS, GUARDIAN_RULE_ID, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
 import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
 
+const SESSION = "acan-guardian-passkey";
+
+/** Remember the wallet and passkey this browser just created or connected. */
+export function rememberSession(): void {
+  try {
+    if (kit.contractId && kit.credentialId) localStorage.setItem(SESSION, JSON.stringify({ contractId: kit.contractId, credentialId: kit.credentialId }));
+  } catch {
+    /* private mode */
+  }
+}
+
+/**
+ * Reconnect the wallet and passkey this browser used before without the kit's
+ * re-check against the chain (several network round trips before the passkey
+ * prompt). Signing still looks the passkey up on-chain, and the smart account
+ * checks every signature.
+ */
+export function resumeSession(): string | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION) ?? "null") as { contractId?: string; credentialId?: string } | null;
+    if (!s?.contractId || !s.credentialId) return null;
+    (kit as unknown as { setConnectedState(c: string, k: string): void }).setConnectedState(s.contractId, s.credentialId);
+    return s.contractId;
+  } catch {
+    return null;
+  }
+}
+
 /** The rule holding this browser's passkey: #0, or its own rule after a recovery. */
 let guardianRule = GUARDIAN_RULE_ID;
 export function setGuardianRule(id: number): void {

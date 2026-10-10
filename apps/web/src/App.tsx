@@ -6,6 +6,8 @@ import {
   fmt,
   grantAgent,
   kit,
+  rememberSession,
+  resumeSession,
   loadGrants,
   readAllowance,
   recentPayments,
@@ -111,14 +113,18 @@ export default function App() {
 
   // Silent restore of a previous passkey session.
   useEffect(() => {
-    const recovered = connectRecovered();
+    const recovered = connectRecovered() ?? resumeSession();
     if (recovered) {
       setAccount(recovered);
       return;
     }
     kit
       .connectWallet()
-      .then((r) => r && setAccount(kit.contractId))
+      .then((r) => {
+        if (!r) return;
+        rememberSession();
+        setAccount(kit.contractId);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -228,6 +234,7 @@ export default function App() {
       if (r.submitResult && !r.submitResult.success) {
         throw new Error(r.submitResult.error?.message ?? "Wallet deployment failed");
       }
+      rememberSession();
       setAccount(r.contractId);
       setNotice("Guardian wallet created. Your passkey is its only admin.");
       setNewCode(await setupRecovery());
@@ -253,6 +260,7 @@ export default function App() {
         return;
       }
       await kit.connectWallet({ prompt: true });
+      rememberSession();
       setAccount(kit.contractId);
     });
 

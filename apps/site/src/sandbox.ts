@@ -251,10 +251,11 @@ export class Sandbox {
   async connect(): Promise<void> {
     if (this.kit.isConnected && this.kit.contractId === this.state.contractId) return;
     if (!this.state.contractId) throw new Error("Create the wallet first");
-    if (this.state.recovered && this.state.credentialId) {
-      // A passkey added with a recovery code is not the wallet's first passkey, so the
-      // kit's birth check for first passkeys does not apply. The account and the
-      // passkey come from the guardian's own code; signing looks the passkey up on-chain.
+    if (this.state.credentialId) {
+      // This browser made the wallet (or recovered it) and saved both ids, so skip the
+      // kit's re-check against the chain, which costs several network round trips
+      // before the passkey prompt. Signing still looks the passkey up on-chain, and
+      // the smart account checks every signature.
       (this.kit as unknown as { setConnectedState(c: string, k: string): void }).setConnectedState(this.state.contractId, this.state.credentialId);
       return;
     }
