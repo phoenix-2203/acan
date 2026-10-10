@@ -1,0 +1,1 @@
+import{n as e}from"./utils-GEzXr17_.js";export{e as sanitizeIdentifier};
