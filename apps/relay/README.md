@@ -131,3 +131,22 @@ sudo bash /opt/acan/apps/relay/deploy/install-site.sh acan-demo.duckdns.org
 The site's files come from the `site-dist` branch, which the "Demo site" workflow
 rebuilds on every push; the server checks for a new build every 5 minutes. The script
 also adds the new address to the relay's `ALLOWED_ORIGINS`. GitHub Pages keeps working.
+
+## Also run the provenance co-signer on this server
+
+With the site installed, the demo site's provenance co-signer can run here instead of
+in each visitor's browser, so the agent's key in the browser never sits next to the
+co-signer's key:
+
+```sh
+sudo git -C /opt/acan pull --ff-only
+sudo bash /opt/acan/apps/cosigner/deploy/install.sh acan-demo.duckdns.org
+```
+
+It makes the co-signer key once (`/etc/acan/cosigner.env`), runs the service
+(`acan-cosigner`, port 8788, one file: `apps/cosigner/deploy/hosted-cosigner.mjs`,
+rebuilt with `npm run cosigner:bundle`) and serves it at
+`https://acan-demo.duckdns.org/cosigner`. Then set `"cosignerUrl"` in
+`deployments/testnet.json` to that address and push; new gated allowances on the site
+use it. A rule is accepted only after the service reads it on-chain and finds its own
+key and the gate policy on it.

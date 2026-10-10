@@ -63,6 +63,9 @@ systemctl restart acan-relay
 say "4/4  HTTPS with Caddy for $DOMAIN"
 cat >/etc/caddy/acan-site.caddy <<CADDY
 $DOMAIN {
+	handle_path /cosigner/* {
+		reverse_proxy 127.0.0.1:8788
+	}
 	root * $WWW
 	encode zstd gzip
 	@git path /.git /.git/*

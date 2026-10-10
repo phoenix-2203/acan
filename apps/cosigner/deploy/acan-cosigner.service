@@ -1,0 +1,21 @@
+# systemd unit for the hosted provenance co-signer (demo site). Install: apps/cosigner/deploy/install.sh
+[Unit]
+Description=ACAN hosted provenance co-signer (demo site)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/acan/cosigner.env
+Environment=HOST=127.0.0.1 COSIGNER_PORT=8788 COSIGNER_STATE=/var/lib/acan-cosigner/registrations.json
+ExecStart=/usr/bin/node /opt/acan/apps/cosigner/deploy/hosted-cosigner.mjs
+Restart=always
+RestartSec=3
+DynamicUser=yes
+StateDirectory=acan-cosigner
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

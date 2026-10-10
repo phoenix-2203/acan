@@ -1,3 +1,4 @@
+import { hostedCosigner } from "../sandbox";
 import { useMemo } from "react";
 import { ASSETS } from "@acan/core/browser";
 import { AccountView } from "../AccountView";
@@ -74,7 +75,11 @@ export function ProvenanceLearn() {
               <li>That you are not persuaded by something you read</li>
               <li>That a purchased result is good: only where the payment came from</li>
               <li>The chain checks that the co-signer signed, not what it checked</li>
-              <li>In this demo, the co-signer and your device key live in this browser</li>
+              <li>
+                {hostedCosigner()
+                  ? "In this demo your device key lives in this browser; the co-signer runs on ACAN's server, apart from the agent's key"
+                  : "In this demo, the co-signer and your device key live in this browser"}
+              </li>
             </ul>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@stellar/stellar-sdk";
 import { delegationId, requestId, signDelegation, type SignedDelegation, type SignedRequest } from "@acan/core/browser";
 import { units } from "../chain";
@@ -32,9 +32,22 @@ export function TeamView() {
   const [root, setRoot] = useState<SignedRequest | null>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [cancelled, setCancelled] = useState<Set<string>>(new Set());
-  const [, bump] = useState(0);
+  const [spent, setSpent] = useState<Record<string, bigint>>({});
+  const [tick, bump] = useState(0);
   const southgate = MERCHANTS[1];
   const price = useMemo(() => xlmToStroops(southgate.items.find((i) => i.id === PRODUCT)!.priceXlm), [southgate]);
+
+  // What the co-signer has counted under each link (the hosted co-signer is asked over HTTP).
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    let on = true;
+    void Promise.all(nodes.map(async (n) => [n.id, await s.sb().spentUnder(n.id).catch(() => 0n)] as const)).then((pairs) => {
+      if (on) setSpent(Object.fromEntries(pairs));
+    });
+    return () => {
+      on = false;
+    };
+  }, [nodes, tick, s.refresh]);
 
   const start = () => {
     const sb = s.sb();
@@ -94,11 +107,12 @@ export function TeamView() {
       await s.payDelegated(what === "budget" ? "Helper (given 5 XLM by Scout)" : "Helper (sent for the full dataset)", root!, [...scout.chain, d], southgate.address, price);
     });
 
-  const cancel = (n: Node) => {
-    s.sb().cancel(n.id);
-    setCancelled(new Set([...cancelled, n.id]));
-    s.add("info", n.chain.length === 0 ? "You cancelled the whole task." : `You cancelled ${n.name}'s mandate, and everything ${n.name} handed on.`);
-  };
+  const cancel = (n: Node) =>
+    s.run(`Cancelling ${n.name}…`, async () => {
+      await s.sb().cancel(n.id);
+      setCancelled(new Set([...cancelled, n.id]));
+      s.add("info", n.chain.length === 0 ? "You cancelled the whole task." : `You cancelled ${n.name}'s mandate, and everything ${n.name} handed on.`);
+    });
 
   const isCancelled = (n: Node) => nodes.slice(0, nodes.indexOf(n) + 1).some((x) => cancelled.has(x.id));
 
@@ -138,7 +152,7 @@ export function TeamView() {
             </div>
             <ol className="team">
               {nodes.map((n, i) => {
-                const spent = s.sb().spentUnder(n.id);
+                const spentHere = spent[n.id] ?? 0n;
                 const off = isCancelled(n);
                 return (
                   <li key={n.id} className={off ? "off" : ""} style={{ marginLeft: i * 28 }}>
@@ -150,12 +164,12 @@ export function TeamView() {
                     <div className="meter compact">
                       <div className="meter-row">
                         <span className="small">
-                          {units(spent)} of {units(n.max)} XLM
+                          {units(spentHere)} of {units(n.max)} XLM
                         </span>
                         <span className="small muted mono">{n.id.slice(0, 8)}…</span>
                       </div>
                       <div className="bar">
-                        <div className="fill" style={{ width: `${Math.min(100, Number((spent * 100n) / n.max))}%` }} />
+                        <div className="fill" style={{ width: `${Math.min(100, Number((spentHere * 100n) / n.max))}%` }} />
                       </div>
                     </div>
                     <div className="row">
@@ -163,7 +177,7 @@ export function TeamView() {
                         {n.name} buys a ledger report ({units(price)} XLM)
                       </button>
                       {!off && (
-                        <button className="secondary small" onClick={() => cancel(n)} disabled={!!s.busy}>
+                        <button className="secondary small" onClick={() => void cancel(n)} disabled={!!s.busy}>
                           {i === 0 ? "Cancel the whole task" : `Cancel ${n.name}`}
                         </button>
                       )}

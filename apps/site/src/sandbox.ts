@@ -12,6 +12,7 @@
  * The sandbox keys are kept in this browser's localStorage so a reload can
  * resume; they control nothing but testnet XLM.
  */
+import { Buffer } from "buffer";
 import { Keypair, StrKey } from "@stellar/stellar-sdk";
 import {
   IndexedDBStorage,
@@ -43,6 +44,9 @@ import {
   gatedSmartAccountTransfer,
   ProvenanceCosigner,
   ProvenanceEscalation,
+  cancelMessage,
+  remoteCosigner,
+  type CosignFn,
   signRequest,
   smartAccountTransfer,
   type PricedItem,
@@ -84,6 +88,9 @@ export interface GrantSettings {
 export interface SavedGrant extends Omit<GrantSettings, "limit" | "shops" | "maxPerPayment" | "gate"> {
   /** The rule needs the provenance co-signer next to the agent. */
   gated?: boolean;
+  /** The co-signer's key on the rule (G…), and whether it is the hosted service. */
+  cosigner?: string;
+  hostedCosigner?: boolean;
   maxPerPayment?: string;
   ruleId: number;
   limit: string;
@@ -96,7 +103,7 @@ interface Saved {
   deployerSecret: string;
   agentSecret: string;
   attackerSecret: string;
-  /** Provenance co-signer key (runs in this browser for the demo). */
+  /** Provenance co-signer key, used only when the deployment has no hosted co-signer. */
   cosignerSecret?: string;
   /** Stands in for a key on the user's own device that signs their requests. */
   deviceSecret?: string;
@@ -148,6 +155,18 @@ export async function friendbot(address: string): Promise<void> {
   // Friendbot answers 400 "createAccountAlreadyExist" for a funded account.
   if (/already|exist/i.test(text)) return;
   throw new Error(`Friendbot could not fund ${address.slice(0, 6)}…: ${text.slice(0, 160)}`);
+}
+
+/** The hosted co-signer's base URL, if this deployment has one. */
+export function hostedCosigner(): string | undefined {
+  return DEPLOYMENT.cosignerUrl?.replace(/\/$/, "") || undefined;
+}
+
+async function hostedKey(url: string): Promise<string> {
+  const r = await fetch(`${url}/health`).catch(() => null);
+  const b = r?.ok ? await r.json().catch(() => null) : null;
+  if (!b || !StrKey.isValidEd25519PublicKey(String(b.cosigner))) throw new Error("The hosted co-signer is not reachable right now; try again in a minute");
+  return String(b.cosigner);
 }
 
 export class Sandbox {
@@ -348,7 +367,9 @@ export class Sandbox {
     await Promise.all(s.shops.map((x) => friendbot(x.address).catch(() => undefined)));
 
     const signer = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, StrKey.decodeEd25519PublicKey(this.agent.publicKey()));
-    const cosignerSigner = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, StrKey.decodeEd25519PublicKey(this.cosigner.publicKey()));
+    const hosted = s.gate ? hostedCosigner() : undefined;
+    const cosignerKey = hosted ? await hostedKey(hosted) : this.cosigner.publicKey();
+    const cosignerSigner = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, StrKey.decodeEd25519PublicKey(cosignerKey));
     const policies = new Map<string, unknown>([
       [
         OZ_SMART_ACCOUNT.spendingLimitPolicy,
@@ -406,10 +427,16 @@ export class Sandbox {
       maxPerPayment: s.maxPerPayment.toString(),
       gated: Boolean(s.gate),
       catalog: s.gate ? s.catalog : undefined,
+      cosigner: s.gate ? cosignerKey : undefined,
+      hostedCosigner: Boolean(hosted),
     };
     this.cosignerService = undefined;
     this.state.grant = grant;
     save(this.state);
+    if (hosted) {
+      progress("Registering the rule with the hosted co-signer…");
+      await this.registerHosted();
+    }
     return grant;
   }
 
@@ -466,14 +493,78 @@ export class Sandbox {
     }));
   }
 
+  /** The co-signer's key on the current rule. */
+  get cosignerKey(): string {
+    return this.state.grant?.cosigner ?? this.cosigner.publicKey();
+  }
+
+  private get hostedUrl(): string | undefined {
+    return this.state.grant?.hostedCosigner ? hostedCosigner() : undefined;
+  }
+
+  /** Tells the hosted co-signer about this rule; it checks the rule on-chain itself. */
+  async registerHosted(): Promise<void> {
+    const url = this.hostedUrl;
+    const g = this.state.grant;
+    if (!url || !g || !this.state.contractId) return;
+    const r = await fetch(`${url}/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ account: this.state.contractId, ruleId: g.ruleId, deviceKey: this.device.publicKey() }),
+    });
+    if (!r.ok) throw new Error(`The hosted co-signer did not accept this rule: ${(await r.json().catch(() => ({})))?.error ?? r.status}`);
+  }
+
   /** Cancel a request or sub-mandate in the co-signer: it and everything below it stop. */
-  cancel(id: string): void {
-    this.service().revoke(id);
+  async cancel(id: string): Promise<void> {
+    const url = this.hostedUrl;
+    if (!url) return this.service().revoke(id);
+    const g = this.state.grant!;
+    const signature = Buffer.from(this.device.sign(cancelMessage(this.state.contractId!, g.ruleId, id))).toString("hex");
+    const r = await fetch(`${url}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ account: this.state.contractId, ruleId: g.ruleId, id, signature }),
+    });
+    if (!r.ok) throw new Error(`The co-signer did not cancel it: ${(await r.json().catch(() => ({})))?.error ?? r.status}`);
   }
 
   /** Spent under a request or sub-mandate, as the co-signer counts it. */
-  spentUnder(id: string): bigint {
-    return this.service().spentUnder(id);
+  async spentUnder(id: string): Promise<bigint> {
+    const url = this.hostedUrl;
+    if (!url) return this.service().spentUnder(id);
+    const g = this.state.grant!;
+    const r = await fetch(`${url}/spent?account=${this.state.contractId}&ruleId=${g.ruleId}&id=${encodeURIComponent(id)}`);
+    const b = await r.json().catch(() => ({}));
+    return r.ok ? BigInt(b.spent) : 0n;
+  }
+
+  /** Who reviews this payment: the hosted co-signer, or the one in this page. */
+  private cosignFor(c: GatedCase, seen: (s: { authEntry: string; cosignature: string }) => void): CosignFn {
+    const url = this.hostedUrl;
+    if (url) {
+      const g = this.state.grant!;
+      const remote = remoteCosigner(url, () => ({ ...c, account: this.state.contractId, ruleId: g.ruleId }));
+      return async (authEntry) => {
+        let r = await remote(authEntry);
+        if (!r.ok && r.why.some((w) => w.includes("not registered"))) {
+          // The service restarted without this rule: register again and retry once.
+          await this.registerHosted();
+          r = await remote(authEntry);
+        }
+        if (r.ok) seen({ authEntry, cosignature: r.signature.signature.toString("hex") });
+        return r;
+      };
+    }
+    const service = this.service();
+    return async (authEntry) => {
+      const d = service.review({ ...c, authEntry });
+      if (d.verdict === "cosign") {
+        seen({ authEntry, cosignature: d.signature.signature.toString("hex") });
+        return { ok: true, signature: d.signature };
+      }
+      return { ok: false, verdict: d.verdict, why: d.verdict === "escalate" ? d.why : [d.reason] };
+    };
   }
 
   /**
@@ -490,7 +581,6 @@ export class Sandbox {
       contextRuleId: g.ruleId,
       networkPassphrase: TESTNET.networkPassphrase,
     });
-    const service = this.service();
     let seen: { authEntry: string; cosignature: string } | undefined;
     try {
       const tx = await gatedSmartAccountTransfer({
@@ -499,14 +589,7 @@ export class Sandbox {
         to,
         amount,
         token: XLM,
-        cosign: async (authEntry) => {
-          const d = service.review({ ...c, authEntry });
-          if (d.verdict === "cosign") {
-            seen = { authEntry, cosignature: d.signature.signature.toString("hex") };
-            return { ok: true, signature: d.signature };
-          }
-          return { ok: false, verdict: d.verdict, why: d.verdict === "escalate" ? d.why : [d.reason] };
-        },
+        cosign: this.cosignFor(c, (x) => (seen = x)),
       });
       return { ok: true, tx, ...seen };
     } catch (e) {

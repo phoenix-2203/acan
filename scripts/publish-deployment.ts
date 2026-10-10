@@ -60,6 +60,8 @@ const next = {
     const rec = optionalPub("RECOVERY_SCOPE_POLICY") ?? (StrKey.isValidContract(previous.recoveryScopePolicy ?? "") ? previous.recoveryScopePolicy : undefined);
     return rec ? { recoveryScopePolicy: rec } : {};
   })(),
+  // The hosted co-signer (apps/cosigner/deploy) is set by hand; keep it.
+  ...(typeof previous.cosignerUrl === "string" && previous.cosignerUrl.startsWith("https://") ? { cosignerUrl: previous.cosignerUrl } : {}),
   // The demo site's AI relay (apps/relay) is set by hand; keep it.
   ...(typeof previous.aiRelay === "string" && previous.aiRelay.startsWith("https://") ? { aiRelay: previous.aiRelay } : {}),
 };

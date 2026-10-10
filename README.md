@@ -602,7 +602,8 @@ packages/confidential   wrapper over the confidential-token SDK: ConfidentialAcc
                         ConfidentialVault (policy-capped top-ups), MerchantInbox (decrypts settlements)
 apps/site               demo site (GitHub Pages): in-browser passkey sandbox, live testnet view
 apps/mcp                MCP server exposing the guarded wallet to any MCP client (acan_start_task when gated)
-apps/cosigner           the provenance co-signer as a local service (POST /review)
+apps/cosigner           the provenance co-signer: a local service (POST /review) and the hosted one
+                        for the demo site (hosted.ts, deploy/install.sh)
 apps/relay              the demo site's AI relay (Groq): chat, and the planner for Autopilot
 packages/core/src/provenance  plan labels, signed requests, co-signer, gated signer, sub-mandates, explainable receipts
 research                originality lab: baseline, competitive landscape, candidates, red team, prototype
@@ -660,7 +661,8 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   TLS between agent and merchant prevents this; the protocol itself does not.
 - **The co-signer is trusted.** The chain checks that the co-signer signed, not
   what it checked. Its decisions are deterministic and re-runnable from the receipt,
-  its key alone pays nothing, and in the demo it runs in your own browser. Still,
+  its key alone pays nothing, and on the demo site it runs on ACAN's server
+  (`apps/cosigner/deploy`), apart from the agent's key in the browser. Still,
   a compromised co-signer together with the agent's key could pay up to the limits,
   as today.
 - **What the gate does not claim.** It traces where the values came from; it does not

@@ -12,6 +12,8 @@ export interface Deployment {
   cosignerGatePolicy?: string;
   /** ACAN recovery scope policy: limits a recovery key to adding a signer to the guardian's rule. */
   recoveryScopePolicy?: string;
+  /** HTTPS address of the hosted provenance co-signer (apps/cosigner/deploy); without it the co-signer runs in the browser. */
+  cosignerUrl?: string;
   /** HTTPS address of the AI relay (apps/relay) for the sandbox's AI chat; no chat without it. */
   aiRelay?: string;
 }

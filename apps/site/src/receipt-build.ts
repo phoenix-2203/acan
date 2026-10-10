@@ -76,7 +76,7 @@ export function buildTaskReceipt(sb: Sandbox, request: SignedRequest, plan: Step
       plan,
       transcript: transcriptFor(plan),
       catalog,
-      cosigner: sb.cosigner.publicKey(),
+      cosigner: sb.cosignerKey,
       networkPassphrase: TESTNET.networkPassphrase,
     },
   };

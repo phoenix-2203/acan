@@ -9,7 +9,20 @@
     "allowImportingTsExtensions": false,
     "resolveJsonModule": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["packages/core/src", "packages/confidential/src", "apps/merchant/src", "apps/agent/src", "apps/mcp/src", "apps/cosigner/src", "scripts"]
+  "include": [
+    "packages/core/src",
+    "packages/confidential/src",
+    "apps/merchant/src",
+    "apps/agent/src",
+    "apps/mcp/src",
+    "apps/cosigner/src",
+    "scripts"
+  ],
+  "exclude": [
+    "apps/cosigner/src/hosted-server.ts"
+  ]
 }
