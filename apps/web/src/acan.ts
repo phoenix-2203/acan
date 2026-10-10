@@ -9,8 +9,15 @@ import {
   createWeightedThresholdParams,
   type ContextRule,
 } from "smart-account-kit";
-import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
+import { ASSETS, GUARDIAN_RULE_ID, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
 import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
+
+/**
+ * Passkey-signed changes always go under the guardian's own rule (#0). Named
+ * explicitly: a recovery rule is also scoped to this account, so the kit could
+ * otherwise not tell which rule to use.
+ */
+const GUARDIAN_ONLY = { resolveContextRuleIds: () => [GUARDIAN_RULE_ID] };
 
 /** Passkey credentials of this browser (shared with the kit). */
 export const storage = new IndexedDBStorage();
@@ -146,7 +153,7 @@ export async function grantAgent(
     validUntil,
   );
   const simulated = tx.result as ContextRule | undefined;
-  const result = await kit.signAndSubmitAdmin(tx);
+  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
   if (!result.success) throw new Error(result.error?.message ?? "Rule creation failed");
 
   // get_context_rules_count is the number of live rules, not the next id
@@ -209,7 +216,7 @@ export async function revokeAgent(ruleId: number): Promise<void> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
   const tx = await kit.rules.remove(ruleId);
-  const result = await kit.signAndSubmitAdmin(tx);
+  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
   if (!result.success) throw new Error(result.error?.message ?? "Revoke failed");
   saveGrants(account, loadGrants(account).filter((g) => g.ruleId !== ruleId));
 }

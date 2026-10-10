@@ -18,6 +18,13 @@ import {
 } from "@acan/core/browser";
 import { kit, storage } from "./acan";
 
+/**
+ * Passkey-signed changes always go under the guardian's own rule (#0). Named
+ * explicitly: a recovery rule is also scoped to this account, so the kit could
+ * otherwise not tell which rule to use.
+ */
+const GUARDIAN_ONLY = { resolveContextRuleIds: () => [GUARDIAN_RULE_ID] };
+
 const RECOVERED = "acan-recovered-passkey";
 const RULES = "acan-recovery-rules";
 
@@ -82,7 +89,7 @@ export async function setupRecovery(policy: string): Promise<RecoveryCode> {
     new Map<string, unknown>([[policy, recoveryScopeParams(GUARDIAN_RULE_ID)]]),
   );
   const simulated = tx.result as ContextRule | undefined;
-  const result = await kit.signAndSubmitAdmin(tx);
+  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
   if (!result.success) throw new Error(result.error?.message ?? "The recovery rule was not created");
   if (typeof simulated?.id !== "number") throw new Error("The recovery rule was created but its id could not be read; check the account's rules before relying on the code");
   rememberRule(account, simulated.id);
@@ -102,7 +109,7 @@ export async function replaceRecovery(policy: string): Promise<{ code: RecoveryC
   try {
     const rule = (await kit.rules.get(old)).result;
     if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
-    const res = await kit.signAndSubmitAdmin(await kit.rules.remove(old));
+    const res = await kit.signAndSubmitAdmin(await kit.rules.remove(old), GUARDIAN_ONLY);
     if (!res.success) throw new Error(res.error?.message ?? "not removed");
     return { code };
   } catch (e) {
