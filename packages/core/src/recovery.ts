@@ -2,20 +2,17 @@
  * Recovery codes for a guardian's passkey wallet.
  *
  * A recovery key is an ed25519 key made in the guardian's browser and added to
- * the smart account under its own context rule: scoped to the account's own
- * address and narrowed by ACAN's recovery scope policy
- * (contracts/recovery-scope-policy) to one action: adding one passkey under a
- * new rule of its own. It cannot pay, call `execute`, upgrade the account, or
- * change existing rules.
+ * the smart account under a rule of its own (OpenZeppelin context rule, no
+ * custom contract). On a new device the guardian creates a passkey and the
+ * recovery key gives it a rule of its own too. (Adding the new passkey to the
+ * guardian's existing rule would lock that rule: OpenZeppelin requires every
+ * signer of a rule without policies to sign.)
  *
- * The recovery code carries everything needed on a new device: the account,
- * the recovery rule's id, and the key. On a new device the guardian creates a
- * passkey and the code gives it its own rule. (Adding it to the guardian's
- * existing rule would lock that rule: OpenZeppelin requires every signer of a
- * rule without policies to sign.)
+ * The key can authorize anything the account can do, so the code is treated
+ * like the account's key: whoever holds it can take the account over.
  */
 import { Buffer } from "buffer";
-import { Account, Address, BASE_FEE, Keypair, Operation, StrKey, TransactionBuilder, contract, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { Account, BASE_FEE, Keypair, Operation, StrKey, TransactionBuilder, contract, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { SmartAccountAgentSigner, entryAddress } from "./agent-signer.js";
 import { OZ_SMART_ACCOUNT, TESTNET } from "./config.js";
 import { describeSimulationError } from "./errors.js";
@@ -64,53 +61,28 @@ export function recoveryPublicKey(c: RecoveryCode): Buffer {
 }
 
 /**
- * Install parameters of the recovery scope policy: the Soroban struct
- * `RecoveryScopeParams { passkey_verifier: Address }`, a map keyed by field name.
- */
-export function recoveryScopeParams(passkeyVerifier: string = OZ_SMART_ACCOUNT.webauthnVerifier): xdr.ScVal {
-  return xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("passkey_verifier"), val: new Address(passkeyVerifier).toScVal() })]);
-}
-
-/** The arguments of `add_context_rule(Default, name, None, [signer], {})`. */
-export function newPasskeyRuleArgs(signer: xdr.ScVal, name = "recovered passkey"): xdr.ScVal[] {
-  return [
-    xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Default")]),
-    nativeToScVal(name, { type: "string" }),
-    xdr.ScVal.scvVoid(),
-    xdr.ScVal.scvVec([signer]),
-    xdr.ScVal.scvMap([]),
-  ];
-}
-
-/**
- * Whether a recovery rule still works with today's recovery policy:
- * "ok"; "missing" (removed, e.g. replaced by a newer code); or "outdated" (made
- * with an earlier version of the policy, which this app no longer uses).
+ * Is the code's recovery rule still on the account with the code's key?
+ * "missing" when it was removed or the code belongs to another rule.
  */
 export async function recoveryRuleStatus(
-  account: string,
-  ruleId: number,
-  currentPolicy: string,
+  code: RecoveryCode,
   rpcUrl: string = TESTNET.rpcUrl,
   networkPassphrase: string = TESTNET.networkPassphrase,
-): Promise<"ok" | "missing" | "outdated"> {
+): Promise<"ok" | "missing"> {
   const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), "0"), { fee: BASE_FEE, networkPassphrase })
-    .addOperation(Operation.invokeContractFunction({ contract: account, function: "get_context_rule", args: [nativeToScVal(ruleId, { type: "u32" })] }))
+    .addOperation(Operation.invokeContractFunction({ contract: code.account, function: "get_context_rule", args: [nativeToScVal(code.ruleId, { type: "u32" })] }))
     .setTimeout(30)
     .build();
   const sim = await new rpc.Server(rpcUrl).simulateTransaction(tx);
   if (rpc.Api.isSimulationError(sim)) return "missing";
-  const rule = scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval) as { name?: string; policies?: unknown[] };
-  if (String(rule?.name) !== RECOVERY_RULE_NAME) return "missing";
-  return (rule.policies ?? []).map(String).includes(currentPolicy) ? "ok" : "outdated";
+  const rule = scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval) as { signers?: unknown[] };
+  const mine = recoveryPublicKey(code);
+  const has = (rule?.signers ?? []).some((x) => Array.isArray(x) && x[0] === "External" && Buffer.from(x[2] as Uint8Array).equals(mine));
+  return has ? "ok" : "missing";
 }
 
-/** Plain words for a code that cannot be used. */
-export function recoveryStatusMessage(status: "missing" | "outdated"): string {
-  return status === "missing"
-    ? "This recovery code no longer works: it was replaced by a newer code, or removed. Use your newest code."
-    : "This recovery code was made with an earlier version of ACAN's recovery and can't be used any more. On a device that still has your passkey, press “Make a new recovery code”.";
-}
+export const RECOVERY_MISSING_MESSAGE =
+  "This recovery code doesn't match a recovery key on that account any more. Check that it is the newest code for this wallet.";
 
 /** The text of the downloadable .txt file. */
 export function recoveryFileText(c: RecoveryCode, opts: { network?: string; site?: string } = {}): string {
@@ -126,21 +98,22 @@ export function recoveryFileText(c: RecoveryCode, opts: { network?: string; site
     "Your passkey lives on one device. If that device is lost, this code adds a new",
     "passkey for your account from another device" + (opts.site ? ` (${opts.site})` : "") + ".",
     "",
-    "Keep it offline. The code cannot pay from your account on its own, but anyone",
-    "holding it could add their own passkey and take over the account. Treat it like a key.",
+    "Keep it offline. Anyone holding this code can take over your account and spend",
+    "from it. Treat it like a key, not a note.",
     "",
   ].join("\n");
 }
 
 /**
- * Gives `signer` (a new passkey) a rule of its own on the account, authorized
- * by the recovery key under the recovery rule. `source` only pays the network
- * fee. Returns the transaction hash and the new passkey's rule id.
+ * Gives a new passkey a rule of its own on the account, authorized by the
+ * recovery key under the recovery rule. `args` are the encoded arguments of
+ * `add_context_rule` (built by the account's own client, so they match its
+ * contract spec). `source` only pays the network fee. Returns the transaction
+ * hash and the new passkey's rule id.
  */
 export async function recoverWithCode(opts: {
   code: RecoveryCode;
-  /** The new signer, as the account's `Signer` ScVal (e.g. smart-account-kit's signerToScVal). */
-  signer: xdr.ScVal;
+  args: xdr.ScVal[];
   source: Keypair;
   rpcUrl?: string;
   networkPassphrase?: string;
@@ -160,7 +133,7 @@ export async function recoverWithCode(opts: {
   const tx = await contract.AssembledTransaction.build({
     contractId: code.account,
     method: "add_context_rule",
-    args: newPasskeyRuleArgs(opts.signer),
+    args: opts.args,
     networkPassphrase,
     rpcUrl,
     publicKey: source.publicKey(),
@@ -179,7 +152,7 @@ export async function recoverWithCode(opts: {
   }
   if (signed !== 1) throw new Error(`Expected one smart-account auth entry, signed ${signed}`);
 
-  // Enforcing simulation: runs __check_auth and the recovery scope policy.
+  // Enforcing simulation: runs the account's __check_auth with the recovery key.
   await tx.simulate();
   if (rpc.Api.isSimulationError(tx.simulation!)) throw new Error(`Recovery refused: ${describeSimulationError(tx.simulation.error)}`);
   const sim = tx.simulation as rpc.Api.SimulateTransactionSuccessResponse;

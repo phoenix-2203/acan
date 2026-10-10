@@ -168,7 +168,6 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 
 // Recovery-code screens (?recovery=1): the policy address and the chain calls are stand-ins.
 if (params.get("recovery")) {
-  (DEPLOYMENT as any).recoveryScopePolicy = StrKey.encodeContract(seed("recovery-policy"));
   P.createWallet = async function (progress: (m: string) => void) {
     progress("Creating…");
     this.state.contractId = CONTRACT;
@@ -177,14 +176,10 @@ if (params.get("recovery")) {
     return CONTRACT;
   };
   P.setupRecovery = async function () {
-    this.state.recovery = { ruleId: 3 };
+    const code = { account: this.state.contractId, ruleId: 3, secret: kp("recovery").secret() };
+    this.state.recovery = { ruleId: 3, code: core.formatRecoveryCode(code) };
     localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
-    return { account: this.state.contractId, ruleId: 3, secret: kp("recovery").secret() };
-  };
-  P.replaceRecovery = async function () {
-    this.state.recovery = { ruleId: 4 };
-    localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
-    return { code: { account: this.state.contractId, ruleId: 4, secret: kp("recovery-2").secret() } };
+    return code;
   };
 }
 

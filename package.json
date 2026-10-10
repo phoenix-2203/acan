@@ -37,7 +37,6 @@
     "catalog:pin": "tsx scripts/pin-catalog.ts",
     "allowlist:deploy": "tsx scripts/deploy-allowlist.ts",
     "gate:deploy": "tsx scripts/deploy-gate.ts",
-    "recovery:deploy": "tsx scripts/deploy-recovery.ts",
     "cosigner:bundle": "esbuild apps/cosigner/src/hosted-server.ts --bundle --platform=node --format=esm --target=node20 --outfile=apps/cosigner/deploy/hosted-cosigner.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" --legal-comments=none",
     "deployment:publish": "tsx scripts/publish-deployment.ts",
     "demo:allowlist": "tsx scripts/demo-allowlist.ts",

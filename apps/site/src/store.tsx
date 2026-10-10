@@ -4,7 +4,7 @@
  * this browser against Stellar testnet.
  */
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { explainRefusal, taskPlan, type RecoveryCode, type Refusal, type SignedDelegation, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
+import { explainRefusal, parseRecoveryCode, taskPlan, type RecoveryCode, type Refusal, type SignedDelegation, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
 import { SandboxAgent, type PayResult } from "./ai-agent";
 import { latestLedger, short, spendingLimit, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
@@ -82,8 +82,8 @@ interface Store {
   newCode: RecoveryCode | null;
   dismissCode: () => void;
   setupRecovery: () => Promise<void>;
-  /** A new code; the old recovery rule is removed. */
-  replaceRecovery: () => Promise<void>;
+  /** The saved recovery code of this wallet, to show again. */
+  savedCode: () => RecoveryCode | null;
   recover: (code: string) => Promise<void>;
 }
 
@@ -241,7 +241,7 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
     const code = await sb().setupRecovery((m) => setBusy(m));
     setRecoveryRule(code.ruleId);
     setNewCode(code);
-    add("info", `Recovery rule #${code.ruleId} added: its key can only add a passkey to your account, never pay. Save the code shown in step 1.`);
+    add("info", `Recovery key added (rule #${code.ruleId}). Save the code shown in step 1.`);
   }
 
   const store: Store = {
@@ -266,21 +266,21 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
         setRecoveryRule(undefined);
         setRecovered(false);
         add("info", `Smart account ${short(id, 6)} deployed and funded with testnet XLM.`);
-        if (DEPLOYMENT.recoveryScopePolicy) await makeCode();
+        await makeCode();
       }),
     recoveryRule,
     recovered,
     newCode,
     dismissCode: () => setNewCode(null),
     setupRecovery: () => run("Setting up your recovery code…", makeCode),
-    replaceRecovery: () =>
-      run("Making a new recovery code…", async () => {
-        const old = sb().recovery?.ruleId;
-        const r = await sb().replaceRecovery((m) => setBusy(m));
-        setRecoveryRule(r.code.ruleId);
-        setNewCode(r.code);
-        add(r.warning ? "error" : "info", r.warning ?? `New recovery code (rule #${r.code.ruleId}). The old code (rule #${old}) no longer works.`);
-      }),
+    savedCode: () => {
+      const c = sb().recovery?.code;
+      try {
+        return c ? parseRecoveryCode(c) : null;
+      } catch {
+        return null;
+      }
+    },
     recover: (code) =>
       run("Recovering your wallet…", async () => {
         const hash = await sb().recover(code, (m) => setBusy(m));

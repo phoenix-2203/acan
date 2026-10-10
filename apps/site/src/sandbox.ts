@@ -13,16 +13,16 @@
  * resume; they control nothing but testnet XLM.
  */
 import { Buffer } from "buffer";
-import { Keypair, StrKey } from "@stellar/stellar-sdk";
+import { Keypair, StrKey, xdr } from "@stellar/stellar-sdk";
 import {
   IndexedDBStorage,
   SmartAccountKit,
   createCallContractContext,
+  createDefaultContext,
   createEd25519Signer,
   createSpendingLimitParams,
   createWeightedThresholdParams,
   createWebAuthnSigner,
-  signerToScVal,
   type ContextRule,
   type StoredCredential,
 } from "smart-account-kit";
@@ -32,10 +32,10 @@ import {
   OZ_SMART_ACCOUNT,
   RECOVERY_RULE_NAME,
   parseRecoveryCode,
+  RECOVERY_MISSING_MESSAGE,
+  formatRecoveryCode,
   recoverWithCode,
   recoveryRuleStatus,
-  recoveryScopeParams,
-  recoveryStatusMessage,
   type RecoveryCode,
   PaymentRejectedError,
   SmartAccountAgentSigner,
@@ -113,8 +113,8 @@ interface Saved {
   contractId?: string;
   credentialId?: string;
   grant?: SavedGrant;
-  /** The recovery rule, once a recovery code was made (the code itself is never stored). */
-  recovery?: { ruleId: number };
+  /** The recovery rule and its code (kept like the sandbox's other testnet keys, so it can be shown again). */
+  recovery?: { ruleId: number; code?: string };
   /** This browser's passkey was added with a recovery code (not the wallet's first passkey). */
   recovered?: boolean;
   /** The rule that holds this browser's passkey: #0 for the wallet's first passkey, its own rule after a recovery. */
@@ -270,16 +270,8 @@ export class Sandbox {
     return { resolveContextRuleIds: () => [id] };
   }
 
-  get recovery(): { ruleId: number } | undefined {
+  get recovery(): { ruleId: number; code?: string } | undefined {
     return this.state.recovery;
-  }
-
-  /** Does this wallet's recovery rule still work with today's recovery policy? */
-  async recoveryStatus(): Promise<"ok" | "missing" | "outdated" | undefined> {
-    const r = this.state.recovery;
-    const policy = DEPLOYMENT.recoveryScopePolicy;
-    if (!r || !policy || !this.state.contractId) return undefined;
-    return recoveryRuleStatus(this.state.contractId, r.ruleId, policy).catch(() => undefined);
   }
 
   get recovered(): boolean {
@@ -287,70 +279,41 @@ export class Sandbox {
   }
 
   /**
-   * Adds a recovery key to the account under its own rule: scoped to the account's
-   * own address and limited by ACAN's recovery scope policy to adding a signer to
-   * the guardian's rule (#0). Returns the code; it is not stored anywhere.
+   * Adds a recovery key to the account under a rule of its own (an OpenZeppelin
+   * context rule with that one ed25519 signer, no custom contract). The code is
+   * kept in this browser, like the sandbox's other testnet keys, so it can be
+   * shown again.
    */
   async setupRecovery(progress: (m: string) => void): Promise<RecoveryCode> {
-    const policy = DEPLOYMENT.recoveryScopePolicy;
-    if (!policy) throw new Error("Recovery codes are not set up on this deployment yet (npm run recovery:deploy).");
     const account = this.state.contractId;
     if (!account) throw new Error("Create the wallet first");
     await this.connect();
     const key = Keypair.random();
     const signer = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, key.rawPublicKey());
-    progress("Approve the recovery rule with your passkey…");
-    const tx = await this.kit.rules.add(
-      createCallContractContext(account),
-      RECOVERY_RULE_NAME,
-      [signer],
-      new Map<string, unknown>([[policy, recoveryScopeParams()]]),
-    );
+    progress("Approve the recovery key with your passkey…");
+    const tx = await this.kit.rules.add(createDefaultContext(), RECOVERY_RULE_NAME, [signer], new Map<string, unknown>());
     const simulated = tx.result as ContextRule | undefined;
     const result = await this.kit.signAndSubmitAdmin(tx, this.guardianOnly());
-    if (!result.success) throw new Error(result.error?.message ?? "The recovery rule was not created");
+    if (!result.success) throw new Error(result.error?.message ?? "The recovery key was not added");
     const ruleId =
       typeof simulated?.id === "number"
         ? simulated.id
         : Math.max(...(await contextRules(account)).filter((r) => r.signers.some((x) => x.kind === "ed25519" && x.key === key.publicKey())).map((r) => r.id));
-    if (!Number.isInteger(ruleId)) throw new Error("The recovery rule was created but its id could not be read back; reload the page");
-    this.state.recovery = { ruleId };
+    if (!Number.isInteger(ruleId)) throw new Error("The recovery key was added but its rule id could not be read back; reload the page");
+    const code: RecoveryCode = { account, ruleId, secret: key.secret() };
+    this.state.recovery = { ruleId, code: formatRecoveryCode(code) };
     save(this.state);
-    return { account, ruleId, secret: key.secret() };
+    return code;
   }
 
   /**
-   * Makes a new recovery code and then removes the old recovery rule, so a missed
-   * or leaked code stops working. The new code is returned even if removing the old
-   * rule fails; `warning` then says so.
-   */
-  async replaceRecovery(progress: (m: string) => void): Promise<{ code: RecoveryCode; warning?: string }> {
-    const old = this.state.recovery?.ruleId;
-    const code = await this.setupRecovery(progress);
-    if (old === undefined || old === code.ruleId) return { code };
-    try {
-      const rule = (await this.kit.rules.get(old)).result;
-      if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
-      progress("Switch off the old code: approve with your passkey…");
-      const res = await this.kit.signAndSubmitAdmin(await this.kit.rules.remove(old), this.guardianOnly());
-      if (!res.success) throw new Error(res.error?.message ?? "not removed");
-      return { code };
-    } catch (e) {
-      return { code, warning: `Your new code works, but the old one (rule #${old}) could not be switched off: ${e instanceof Error ? e.message : String(e)}. Make a new code again to retry.` };
-    }
-  }
-
-  /**
-   * On a new device: creates a passkey here and adds it to the account's
-   * guardian rule, authorized by the recovery code.
+   * On a new device: creates a passkey here and gives it a rule of its own on the
+   * account, authorized by the recovery key.
    */
   async recover(codeText: string, progress: (m: string) => void): Promise<string> {
     const code = parseRecoveryCode(codeText);
-    const policy = DEPLOYMENT.recoveryScopePolicy;
-    if (!policy) throw new Error("Recovery codes are not set up on this deployment yet.");
     progress("Checking your recovery code on testnet…");
-    const status = await recoveryRuleStatus(code.account, code.ruleId, policy);
-    if (status !== "ok") throw new Error(recoveryStatusMessage(status));
+    if ((await recoveryRuleStatus(code)) !== "ok") throw new Error(RECOVERY_MISSING_MESSAGE);
     progress("Funding a throwaway testnet account to pay the fee…");
     await friendbot(this.deployer.publicKey());
     progress("Create a passkey for this device when your browser asks…");
@@ -358,8 +321,13 @@ export class Sandbox {
       createPasskey(app: string, user: string): Promise<{ credentialId: string; publicKey: Uint8Array; rawResponse: { response: { transports?: string[] } } }>;
     }).createPasskey("ACAN sandbox", `Recovered guardian ${new Date().toLocaleDateString()}`);
     const signer = createWebAuthnSigner(OZ_SMART_ACCOUNT.webauthnVerifier, created.publicKey, created.credentialId);
+    // Let the account's own client encode add_context_rule (its contract spec), then sign with the recovery key.
+    const kit = this.kit as unknown as { setConnectedState(c: string, k?: string): void };
+    kit.setConnectedState(code.account, undefined);
+    const draft = await this.kit.rules.add(createDefaultContext(), "recovered passkey", [signer], new Map<string, unknown>());
+    const args = (draft.built!.operations[0] as unknown as { func: { invokeContract(): { args(): xdr.ScVal[] } } }).func.invokeContract().args();
     progress("Adding the new passkey to your account with the recovery code…");
-    const { tx: hash, ruleId } = await recoverWithCode({ code, signer: signerToScVal(signer), source: this.deployer });
+    const { tx: hash, ruleId } = await recoverWithCode({ code, args, source: this.deployer });
     await this.storage.save({
       credentialId: created.credentialId,
       publicKey: created.publicKey,
@@ -376,10 +344,11 @@ export class Sandbox {
     this.state.contractId = code.account;
     this.state.credentialId = created.credentialId;
     this.state.recovered = true;
-    this.state.recovery = { ruleId: code.ruleId };
+    this.state.recovery = { ruleId: code.ruleId, code: formatRecoveryCode(code) };
     this.state.grant = undefined;
     this.cosignerService = undefined;
     save(this.state);
+    kit.setConnectedState(code.account, created.credentialId);
     return hash;
   }
 

@@ -316,7 +316,6 @@ Run it for any AI client:
 ```bash
 npm run cosigner:setup   # co-signer key → .env (COSIGNER_SECRET, COSIGNER_ADDRESS)
 npm run gate:deploy      # once: OZ weighted-threshold policy → .env, deployments/testnet.json
-npm run recovery:deploy  # once: recovery scope policy (recovery codes) → .env, deployments/testnet.json
 npm run catalog:pin      # pin the merchants' prices and addresses for the co-signer
 # dashboard: Authorize an agent with "Provenance gate" ticked; copy the request key it shows
 # .env: COSIGNER_URL=http://127.0.0.1:4041, COSIGNER_RULE_ID=<new rule>, COSIGNER_DEVICE_KEYS=<key>
@@ -448,24 +447,17 @@ guardian's own browser before the passkey signs anything.
   passkey approval each). A freeze switch in the guardian service refuses new
   agent requests and rejects pending ones. Payments to a recipient the
   guardian service does not know are flagged in red.
-- **Recovery code** (`contracts/recovery-scope-policy`). Right after the wallet is
-  created (demo site and dashboard), one more passkey approval adds a recovery key
-  under its own rule. The rule is scoped to the account's own address, and ACAN's
-  recovery scope policy narrows it to a single action: giving one new passkey a rule
-  of its own (no expiry, no policies, exactly one WebAuthn signer). It refuses
-  everything else the account can be asked to do, including `execute` (which would
-  let it make any call as the account, such as a payment), `upgrade`, and changes to
-  existing rules (#3501), and it requires the recovery key's own signature (#3502).
-  The new passkey gets its own rule because OpenZeppelin requires every signer of a
-  rule without policies to sign: a second passkey on the guardian's rule would lock
-  that rule for both devices (a test shows this). The code
-  (`acan-recovery-1:<rule>:<account>:<key>`) is shown once, to copy or download, and
-  is not stored; "Make a new recovery code" replaces it and removes the old rule. On a
-  new device, "Lost your device? Recover with your code" creates a passkey there and
-  the code gives it its rule. Anyone holding the code could do the same, so it is
-  treated like a key. Proven in the Soroban host against OpenZeppelin's own
-  `do_check_auth` with real signatures (11 tests). Deploy once with
-  `npm run recovery:deploy`.
+- **Recovery code.** Right after the wallet is created (demo site and dashboard), one
+  more passkey approval adds a recovery key under a rule of its own (an OpenZeppelin
+  context rule with that one ed25519 signer; no custom contract). The code
+  (`acan-recovery-1:<rule>:<account>:<key>`) is shown to copy or download, and kept in
+  the browser so "Show my recovery code" can show it again. On a new device, "Lost
+  your device? Recover with your code" creates a passkey there, and the recovery key
+  gives it a rule of its own. The new passkey does not join the first passkey's rule:
+  OpenZeppelin requires every signer of a rule without policies to sign, so a second
+  passkey there would lock that rule for both devices. The recovery key can authorize
+  anything the account can do, so the code is a key: whoever holds it can take the
+  account over.
 - **Private-spending panel.** The dashboard shows each confidential settlement
   twice: what the public sees ("hidden") and what the guardian's auditor key
   decrypts, locally on the guardian's machine.
@@ -619,8 +611,7 @@ apps/merchant           demo x402 merchants A and B: catalog at /, paid data rou
 apps/agent              agent.ts (public), agent-private.ts (private), agent-ai.ts (language model),
                         wallet.ts (shared payment logic), llm.ts (Groq / Claude / Ollama adapters)
 contracts               merchant-allowlist-policy: Soroban policy contract for OZ smart accounts;
-                        cosigner-gate-policy: OZ weighted-threshold policy, deployed unchanged;
-                        recovery-scope-policy: limits a recovery key to adding a passkey
+                        cosigner-gate-policy: OZ weighted-threshold policy, deployed unchanged
 scripts                 setup, fund, status, diagnose, ct-setup, audit, merchant-cashout,
                         guardian (local approvals + audit service), deploy-allowlist
 vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT), one patch
@@ -677,11 +668,10 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   held for you by design.
 - **Sub-agents.** Their authority is enforced by the co-signer, not by a contract of
   their own: sub-agents hold no key on the account.
-- **Recovery codes.** The code can give a new passkey its own rule, so whoever holds
-  it can take the account over in two steps; it cannot pay in one. A passkey added
-  with a code is connected by the app directly (the kit's birth check covers only a
-  wallet's first passkey); the account and passkey come from the guardian's own code
-  and are looked up on-chain when signing.
+- **Recovery codes.** A recovery code is a full key to the account, kept in the
+  browser that made it. A passkey added with a code is connected by the app directly
+  (the kit's birth check covers only a wallet's first passkey); the account and passkey
+  come from the guardian's own code and are looked up on-chain when signing.
 - **Facilitator.** Smart-account payers currently need a facilitator with a
   higher fee ceiling and smart-account-aware event checks (provided here).
 

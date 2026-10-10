@@ -102,7 +102,6 @@ app.get("/config", (_req, res) => {
     // Provenance gate: the co-signer's public key and the gate policy, for a gated rule.
     cosignerAddress: env.COSIGNER_ADDRESS || null,
     cosignerGatePolicy: env.COSIGNER_GATE_POLICY || null,
-    recoveryScopePolicy: env.RECOVERY_SCOPE_POLICY || null,
     recipients,
   });
 });

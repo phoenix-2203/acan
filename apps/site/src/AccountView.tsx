@@ -1,4 +1,3 @@
-import { DEPLOYMENT } from "./deployment";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OZ_SMART_ACCOUNT } from "@acan/core/browser";
 import {
@@ -115,9 +114,7 @@ export function AccountView(p: AccountViewProps) {
           : "Merchant budget"
         : a === OZ_SMART_ACCOUNT.thresholdPolicy
           ? "Threshold"
-          : a === DEPLOYMENT.recoveryScopePolicy
-            ? "Recovery scope (may only add a passkey)"
-            : `Policy ${short(a)}`;
+          : `Policy ${short(a)}`;
 
   return (
     <div className="acct">

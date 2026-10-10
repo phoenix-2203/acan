@@ -22018,9 +22018,8 @@ var testnet_default = {
     version: "0.3"
   },
   cosignerGatePolicy: "CDFMTQUF5EKXKCXXXN2UYZUXM2CUYMIHXNTJQF33ZNR2OAHWMYFRIOLP",
-  recoveryScopePolicy: "CDSENZUPJG6VGBOTP5PX3GWTO3BLU5OIJP3U3E5GARITU45AHC7ZKQYX",
-  aiRelay: "https://acan-ai.duckdns.org",
-  cosignerUrl: "https://acan-demo.duckdns.org/cosigner"
+  cosignerUrl: "https://acan-demo.duckdns.org/cosigner",
+  aiRelay: "https://acan-ai.duckdns.org"
 };
 
 // apps/site/src/ai-agent.ts
@@ -22052,9 +22051,8 @@ var testnet_default2 = {
     version: "0.3"
   },
   cosignerGatePolicy: "CDFMTQUF5EKXKCXXXN2UYZUXM2CUYMIHXNTJQF33ZNR2OAHWMYFRIOLP",
-  recoveryScopePolicy: "CDSENZUPJG6VGBOTP5PX3GWTO3BLU5OIJP3U3E5GARITU45AHC7ZKQYX",
-  aiRelay: "https://acan-ai.duckdns.org",
-  cosignerUrl: "https://acan-demo.duckdns.org/cosigner"
+  cosignerUrl: "https://acan-demo.duckdns.org/cosigner",
+  aiRelay: "https://acan-ai.duckdns.org"
 };
 
 // apps/site/src/deployment.ts

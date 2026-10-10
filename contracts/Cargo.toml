@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["merchant-allowlist-policy", "cosigner-gate-policy", "recovery-scope-policy"]
+members = ["merchant-allowlist-policy", "cosigner-gate-policy"]
 
 [workspace.dependencies]
 # Pinned to the OpenZeppelin release whose smart-account types match the

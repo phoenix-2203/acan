@@ -36,7 +36,7 @@ import { auditCsv, auditJson, download } from "./audit-export";
 import { AgentChat } from "./AgentChat";
 import { TasksPanel } from "./TasksPanel";
 import { RecoveryBox } from "./RecoveryBox";
-import { connectRecovered, recoverWallet, replaceRecovery, setupRecovery } from "./recovery";
+import { connectRecovered, recoverWallet, setupRecovery } from "./recovery";
 import { PolicyComposer } from "./PolicyComposer";
 
 type Busy =
@@ -230,27 +230,17 @@ export default function App() {
       }
       setAccount(r.contractId);
       setNotice("Guardian wallet created. Your passkey is its only admin.");
-      if (config?.recoveryScopePolicy) setNewCode(await setupRecovery(config.recoveryScopePolicy));
+      setNewCode(await setupRecovery());
     });
 
   const makeRecoveryCode = () =>
     run("recovery", async () => {
-      if (!config?.recoveryScopePolicy) throw new Error("Set RECOVERY_SCOPE_POLICY (npm run recovery:deploy) and restart the guardian service");
-      setNewCode(await setupRecovery(config.recoveryScopePolicy));
-    });
-
-  const newRecoveryCode = () =>
-    run("recovery", async () => {
-      if (!config?.recoveryScopePolicy) throw new Error("Set RECOVERY_SCOPE_POLICY (npm run recovery:deploy) and restart the guardian service");
-      const r = await replaceRecovery(config.recoveryScopePolicy);
-      setNewCode(r.code);
-      if (r.warning) setError(r.warning);
-      else setNotice(`New recovery code (rule #${r.code.ruleId}). The old code no longer works.`);
+      setNewCode(await setupRecovery());
     });
 
   const recover = (code: string) =>
     run("recovery", async () => {
-      const r = await recoverWallet(code, setNotice, config?.recoveryScopePolicy);
+      const r = await recoverWallet(code, setNotice);
       setAccount(r.account);
       setNotice(`Recovered: this browser's new passkey was added to ${short(r.account, 6)} (tx ${r.tx.slice(0, 8)}…).`);
     });
@@ -425,7 +415,7 @@ export default function App() {
                   {busy === "connect" ? "Connecting…" : "Use existing passkey"}
                 </button>
               </div>
-              <RecoveryBox account={null} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={null} onSetup={makeRecoveryCode} onReplace={newRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
+              <RecoveryBox account={null} busy={busy !== null} newCode={null} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
             </>
           ) : (
             <dl className="facts">
@@ -447,7 +437,7 @@ export default function App() {
             </dl>
           )}
           {account && (
-            <RecoveryBox account={account} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={newCode} onSetup={makeRecoveryCode} onReplace={newRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
+            <RecoveryBox account={account} busy={busy !== null} newCode={newCode} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
           )}
         </div>
       </section>

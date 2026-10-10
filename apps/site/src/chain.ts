@@ -118,6 +118,7 @@ export async function contextRules(account: string): Promise<RuleView[]> {
         name: String(r.name),
         ...scope,
         ...(scope.scopeContract === account ? { scope: "Changes to this account only" } : {}),
+        ...(recovery ? { scope: "Anything (recovery key)" } : {}),
         signers: (r.signers ?? []).map(describeSigner).map((x: SignerView) => (recovery && x.kind === "ed25519" ? { ...x, label: `Recovery key ${short(x.key)}` } : x)),
         policies: (r.policies ?? []).map((p: unknown) => String(p)),
         validUntil: r.valid_until === undefined || r.valid_until === null ? undefined : Number(r.valid_until),
