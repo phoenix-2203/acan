@@ -473,3 +473,15 @@ td:first-child { width: 48%; }
 .recovery-card p { margin: 0; }
 .recovery-code { display: block; width: 100%; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px dashed var(--line-strong); font: 500 13px/1.5 "IBM Plex Mono", ui-monospace, monospace; word-break: break-all; user-select: all; }
 .recovery-warn { font-size: 14px; color: var(--warn); background: var(--warn-bg); padding: 10px 12px; border-radius: 10px; }
+
+/* Landing: Start here */
+.tour { padding: 8px 0 48px; }
+.tour-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.tour-head .eyebrow { margin: 0; }
+.tour-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tour-steps li { display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; }
+.tour-steps li:first-child { border-color: var(--accent); }
+.tour-steps b { display: block; margin-bottom: 4px; }
+.tour-steps p { margin: 0 0 8px; }
+.tour-n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+@media (max-width: 860px) { .tour-steps { grid-template-columns: 1fr; } }

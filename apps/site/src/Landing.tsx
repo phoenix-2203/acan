@@ -48,6 +48,28 @@ const FEATURES = [
   },
 ];
 
+/** The shortest path to the point: three steps, about three minutes. */
+const TOUR = [
+  {
+    title: "Create a wallet and give an agent an allowance",
+    body: "A passkey wallet on Stellar testnet, funded with free testnet XLM. Keep “Provenance gate” ticked and approve.",
+    go: "wallet",
+    cta: "Open Wallet & allowance",
+  },
+  {
+    title: "Let the agent buy what you asked for",
+    body: "In Autopilot, press “Buy the cheapest ledger report”. It traces back to you, so it is co-signed and paid.",
+    go: "autopilot",
+    cta: "Open Autopilot",
+  },
+  {
+    title: "Let a web page try to trick it",
+    body: "Run the Tidewire task: the note tells the agent to buy something else. The co-signer refuses, and the agent's key alone is refused by your smart account (#3213).",
+    go: "autopilot",
+    cta: "Try the injection",
+  },
+];
+
 const PROOF = [
   { what: "Provenance gate: Autopilot payment co-signed and paid", hash: "c73563358346d9464145afe3e416cdf2a76ab0aea2dfb36ee792d9d922ff0e5a" },
   { what: "x402 payment in USDC from the smart account", hash: "4394246d34c0d491671d9c76ba78f8785c0c377054d62f6038ce0456a13aaf6a" },
@@ -128,6 +150,29 @@ export function Landing() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="tour" aria-labelledby="tour-title">
+        <div className="tour-head">
+          <p className="eyebrow" id="tour-title">
+            Start here
+          </p>
+          <span className="muted small">about 3 minutes · nothing to install · testnet only</span>
+        </div>
+        <ol className="tour-steps">
+          {TOUR.map((t, i) => (
+            <li key={t.title}>
+              <span className="tour-n mono">{i + 1}</span>
+              <div>
+                <b>{t.title}</b>
+                <p className="muted small">{t.body}</p>
+                <a className="more" href={`#/app/${t.go}`}>
+                  {t.cta} <Icon name="arrow" size={16} />
+                </a>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
       <section className="features">

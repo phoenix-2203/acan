@@ -15,7 +15,8 @@ const INTRO: Record<string, string> = {
     "An AI agent that pays on its own. Each payment needs the provenance co-signer, which signs only what traces back to your own request. Try the Tidewire task: the note it reads tells the agent to buy something else.",
   team:
     "Agents hiring agents. Your agent hands part of your task to a sub-agent, which can hand part of its share on. Each hand-off can only narrow, every payment counts against every budget back up to you, and cancelling one link stops everything below it.",
-  wallet: "Everything runs in your browser against Stellar testnet. The refusals you see are real contract errors, not checks in this page.",
+  wallet:
+    "Everything runs in your browser against Stellar testnet. The refusals you see are real contract errors, not checks in this page. The sandbox uses free testnet XLM so anyone can try it; ACAN's own agent pays merchants in USDC over x402 (see Proof on testnet).",
   agent: "The agent proposes, you pick, and your smart account has the final word. Try to talk it into paying a stranger.",
   live: `ACAN's own guardian account, read from testnet now. Rule #${DEPLOYMENT.agentRuleId} is the AI agent's allowance, in USDC, with the merchant budget policy attached.`,
   receipts:

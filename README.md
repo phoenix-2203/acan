@@ -623,6 +623,31 @@ scripts                 setup, fund, status, diagnose, ct-setup, audit, merchant
 vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT), one patch
 ```
 
+## Path to production
+
+ACAN runs on testnet today. What it would take to put it in front of real money:
+
+- **Who it is for.** Wallets and agent platforms that let AI agents pay for things
+  (x402 services, MCP clients such as Claude Desktop or Cursor), and teams that give
+  agents budgets. The SDK pieces (`packages/core`, the policies, the MCP server) are
+  MIT and can be embedded.
+- **Running the co-signer.** Today it runs on ACAN's server for the demo site, or
+  locally (`npm run cosigner`). In production it would run where the agent cannot
+  reach it: on the user's own device, at the wallet provider, or as several
+  independent co-signers. The weighted-threshold policy already takes weights, so
+  "any two of three co-signers" needs no new contract. Every decision can be re-run
+  from the receipt, so a co-signer can be audited after the fact.
+- **Before mainnet.**
+  - An external audit of ACAN's merchant budget policy and the co-signer.
+  - Real USDC, and a facilitator with smart-account support (provided here).
+  - Private mode stays testnet-only until the confidential-token verifier and
+    circuits it builds on are audited.
+  - Recovery that does not depend on one saved code (for example, several
+    guardians or a time-locked recovery).
+- **How it could pay for itself.** The SDK and contracts stay open source; a hosted
+  co-signer could charge per co-signature or per month. This is a plan, not
+  something built.
+
 ## Security model and limitations
 
 - **What the cap guarantees.** The agent can move at most the policy amount per
