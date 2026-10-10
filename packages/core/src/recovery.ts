@@ -68,21 +68,26 @@ export async function recoveryRuleStatus(
   code: RecoveryCode,
   rpcUrl: string = TESTNET.rpcUrl,
   networkPassphrase: string = TESTNET.networkPassphrase,
-): Promise<"ok" | "missing"> {
+): Promise<"ok" | "missing" | "outdated"> {
   const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), "0"), { fee: BASE_FEE, networkPassphrase })
     .addOperation(Operation.invokeContractFunction({ contract: code.account, function: "get_context_rule", args: [nativeToScVal(code.ruleId, { type: "u32" })] }))
     .setTimeout(30)
     .build();
   const sim = await new rpc.Server(rpcUrl).simulateTransaction(tx);
   if (rpc.Api.isSimulationError(sim)) return "missing";
-  const rule = scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval) as { signers?: unknown[] };
+  const rule = scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval) as { signers?: unknown[]; policies?: unknown[] };
   const mine = recoveryPublicKey(code);
   const has = (rule?.signers ?? []).some((x) => Array.isArray(x) && x[0] === "External" && Buffer.from(x[2] as Uint8Array).equals(mine));
-  return has ? "ok" : "missing";
+  if (!has) return "missing";
+  // Codes made by an earlier version of the site carry a policy that only allows that version's recovery step.
+  return (rule?.policies ?? []).length > 0 ? "outdated" : "ok";
 }
 
 export const RECOVERY_MISSING_MESSAGE =
   "This recovery code doesn't match a recovery key on that account any more. Check that it is the newest code for this wallet.";
+
+export const RECOVERY_OUTDATED_MESSAGE =
+  "This recovery code was made by an earlier version of the site, so it can't be used. Reload the page where your wallet is (to get the current version), press Start over, and make a new wallet and code.";
 
 /** The text of the downloadable .txt file. */
 export function recoveryFileText(c: RecoveryCode, opts: { network?: string; site?: string } = {}): string {

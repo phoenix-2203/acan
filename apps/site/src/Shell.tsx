@@ -58,6 +58,9 @@ export function Shell({ view }: { view: string }) {
           <a href={REPO_URL} target="_blank" rel="noreferrer">
             <Icon name="git" size={16} /> Source
           </a>
+          <span className="muted small mono" title="The version of the site this page is running">
+            build {__BUILD__}
+          </span>
         </div>
       </aside>
 

@@ -33,6 +33,7 @@ import {
   RECOVERY_RULE_NAME,
   parseRecoveryCode,
   RECOVERY_MISSING_MESSAGE,
+  RECOVERY_OUTDATED_MESSAGE,
   formatRecoveryCode,
   recoverWithCode,
   recoveryRuleStatus,
@@ -313,7 +314,8 @@ export class Sandbox {
   async recover(codeText: string, progress: (m: string) => void): Promise<string> {
     const code = parseRecoveryCode(codeText);
     progress("Checking your recovery code on testnet…");
-    if ((await recoveryRuleStatus(code)) !== "ok") throw new Error(RECOVERY_MISSING_MESSAGE);
+    const status = await recoveryRuleStatus(code);
+    if (status !== "ok") throw new Error(status === "outdated" ? RECOVERY_OUTDATED_MESSAGE : RECOVERY_MISSING_MESSAGE);
     progress("Funding a throwaway testnet account to pay the fee…");
     await friendbot(this.deployer.publicKey());
     progress("Create a passkey for this device when your browser asks…");

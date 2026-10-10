@@ -6,7 +6,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   base: "./",
   plugins: [react()],
-  define: { global: "globalThis" },
+  // The commit a build came from, shown in the app's footer (GitHub Actions sets GITHUB_SHA).
+  define: { global: "globalThis", __BUILD__: JSON.stringify((process.env.GITHUB_SHA ?? "local").slice(0, 7)) },
   resolve: { dedupe: ["@stellar/stellar-sdk"] },
   build: { target: "es2022" },
   esbuild: { target: "es2022" },

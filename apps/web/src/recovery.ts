@@ -9,6 +9,7 @@ import { createDefaultContext, createEd25519Signer, createWebAuthnSigner, type C
 import {
   OZ_SMART_ACCOUNT,
   RECOVERY_MISSING_MESSAGE,
+  RECOVERY_OUTDATED_MESSAGE,
   RECOVERY_RULE_NAME,
   TESTNET,
   formatRecoveryCode,
@@ -98,7 +99,8 @@ export async function setupRecovery(): Promise<RecoveryCode> {
 export async function recoverWallet(codeText: string, progress: (m: string) => void): Promise<{ account: string; tx: string }> {
   const code = parseRecoveryCode(codeText);
   progress("Checking your recovery code on testnet…");
-  if ((await recoveryRuleStatus(code)) !== "ok") throw new Error(RECOVERY_MISSING_MESSAGE);
+  const status = await recoveryRuleStatus(code);
+    if (status !== "ok") throw new Error(status === "outdated" ? RECOVERY_OUTDATED_MESSAGE : RECOVERY_MISSING_MESSAGE);
   progress("Funding a throwaway testnet account to pay the fee…");
   const fee = Keypair.random();
   const r = await fetch(`${TESTNET.friendbotUrl}?addr=${encodeURIComponent(fee.publicKey())}`);
