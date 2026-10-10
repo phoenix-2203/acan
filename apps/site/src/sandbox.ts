@@ -275,6 +275,27 @@ export class Sandbox {
   }
 
   /**
+   * Makes a new recovery code and then removes the old recovery rule, so a missed
+   * or leaked code stops working. The new code is returned even if removing the old
+   * rule fails; `warning` then says so.
+   */
+  async replaceRecovery(progress: (m: string) => void): Promise<{ code: RecoveryCode; warning?: string }> {
+    const old = this.state.recovery?.ruleId;
+    const code = await this.setupRecovery(progress);
+    if (old === undefined || old === code.ruleId) return { code };
+    try {
+      const rule = (await this.kit.rules.get(old)).result;
+      if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
+      progress("Switch off the old code: approve with your passkey…");
+      const res = await this.kit.signAndSubmitAdmin(await this.kit.rules.remove(old));
+      if (!res.success) throw new Error(res.error?.message ?? "not removed");
+      return { code };
+    } catch (e) {
+      return { code, warning: `Your new code works, but the old one (rule #${old}) could not be switched off: ${e instanceof Error ? e.message : String(e)}. Make a new code again to retry.` };
+    }
+  }
+
+  /**
    * On a new device: creates a passkey here and adds it to the account's
    * guardian rule, authorized by the recovery code.
    */

@@ -111,11 +111,14 @@ export async function contextRules(account: string): Promise<RuleView[]> {
     );
     for (const r of batch) {
       if (!r) continue;
+      const recovery = String(r.name) === "recovery";
+      const scope = describeScope(r.context_type);
       rules.push({
         id: Number(r.id),
         name: String(r.name),
-        ...describeScope(r.context_type),
-        signers: (r.signers ?? []).map(describeSigner),
+        ...scope,
+        ...(scope.scopeContract === account ? { scope: "Changes to this account only" } : {}),
+        signers: (r.signers ?? []).map(describeSigner).map((x: SignerView) => (recovery && x.kind === "ed25519" ? { ...x, label: `Recovery key ${short(x.key)}` } : x)),
         policies: (r.policies ?? []).map((p: unknown) => String(p)),
         validUntil: r.valid_until === undefined || r.valid_until === null ? undefined : Number(r.valid_until),
       });

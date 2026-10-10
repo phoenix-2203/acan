@@ -82,6 +82,8 @@ interface Store {
   newCode: RecoveryCode | null;
   dismissCode: () => void;
   setupRecovery: () => Promise<void>;
+  /** A new code; the old recovery rule is removed. */
+  replaceRecovery: () => Promise<void>;
   recover: (code: string) => Promise<void>;
 }
 
@@ -271,6 +273,14 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
     newCode,
     dismissCode: () => setNewCode(null),
     setupRecovery: () => run("Setting up your recovery code…", makeCode),
+    replaceRecovery: () =>
+      run("Making a new recovery code…", async () => {
+        const old = sb().recovery?.ruleId;
+        const r = await sb().replaceRecovery((m) => setBusy(m));
+        setRecoveryRule(r.code.ruleId);
+        setNewCode(r.code);
+        add(r.warning ? "error" : "info", r.warning ?? `New recovery code (rule #${r.code.ruleId}). The old code (rule #${old}) no longer works.`);
+      }),
     recover: (code) =>
       run("Recovering your wallet…", async () => {
         const hash = await sb().recover(code, (m) => setBusy(m));

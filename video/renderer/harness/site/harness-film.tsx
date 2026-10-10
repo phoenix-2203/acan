@@ -181,6 +181,11 @@ if (params.get("recovery")) {
     localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
     return { account: this.state.contractId, ruleId: 3, secret: kp("recovery").secret() };
   };
+  P.replaceRecovery = async function () {
+    this.state.recovery = { ruleId: 4 };
+    localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
+    return { code: { account: this.state.contractId, ruleId: 4, secret: kp("recovery-2").secret() } };
+  };
 }
 
 const { default: App } = await import("./App");

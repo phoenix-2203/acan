@@ -89,6 +89,27 @@ export async function setupRecovery(policy: string): Promise<RecoveryCode> {
   return { account, ruleId: simulated.id, secret: key.secret() };
 }
 
+/**
+ * A new recovery code, then the old recovery rule removed so a missed or leaked
+ * code stops working. The new code is returned even if the removal fails.
+ */
+export async function replaceRecovery(policy: string): Promise<{ code: RecoveryCode; warning?: string }> {
+  const account = kit.contractId;
+  if (!account) throw new Error("Connect the guardian wallet first");
+  const old = recoveryRuleFor(account);
+  const code = await setupRecovery(policy);
+  if (old === undefined || old === code.ruleId) return { code };
+  try {
+    const rule = (await kit.rules.get(old)).result;
+    if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
+    const res = await kit.signAndSubmitAdmin(await kit.rules.remove(old));
+    if (!res.success) throw new Error(res.error?.message ?? "not removed");
+    return { code };
+  } catch (e) {
+    return { code, warning: `Your new code works, but the old one (rule #${old}) could not be switched off: ${e instanceof Error ? e.message : String(e)}. Make a new code again to retry.` };
+  }
+}
+
 /** On a new device: create a passkey here and add it to the account with the recovery code. */
 export async function recoverWallet(codeText: string, progress: (m: string) => void): Promise<{ account: string; tx: string }> {
   const code = parseRecoveryCode(codeText);

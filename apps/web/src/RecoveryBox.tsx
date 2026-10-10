@@ -9,6 +9,7 @@ export function RecoveryBox(props: {
   busy: boolean;
   newCode: RecoveryCode | null;
   onSetup: () => void;
+  onReplace: () => void;
   onRecover: (code: string) => void;
   onSaved: () => void;
 }) {
@@ -77,10 +78,18 @@ export function RecoveryBox(props: {
   const rule = recoveryRuleFor(account);
   if (rule !== undefined) {
     return (
-      <p className="muted small">
-        {recoveredPasskey()?.contractId === account ? "This browser's passkey was added with your recovery code. " : ""}Recovery code set up
-        (rule #{rule}: it can only add a passkey to this account).
-      </p>
+      <div style={{ marginTop: 10 }}>
+        <p className="muted small">
+          {recoveredPasskey()?.contractId === account ? "This browser's passkey was added with your recovery code. " : ""}Recovery code set up
+          (rule #{rule}: it can only add a passkey to this account). It is shown only once; if you didn't save it, or think someone else has
+          it, make a new one.
+        </p>
+        {available && (
+          <button className="ghost" onClick={props.onReplace} disabled={busy}>
+            Make a new recovery code
+          </button>
+        )}
+      </div>
     );
   }
   if (!available) return null;

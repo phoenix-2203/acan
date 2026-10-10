@@ -36,7 +36,7 @@ import { auditCsv, auditJson, download } from "./audit-export";
 import { AgentChat } from "./AgentChat";
 import { TasksPanel } from "./TasksPanel";
 import { RecoveryBox } from "./RecoveryBox";
-import { connectRecovered, recoverWallet, setupRecovery } from "./recovery";
+import { connectRecovered, recoverWallet, replaceRecovery, setupRecovery } from "./recovery";
 import { PolicyComposer } from "./PolicyComposer";
 
 type Busy =
@@ -239,6 +239,15 @@ export default function App() {
       setNewCode(await setupRecovery(config.recoveryScopePolicy));
     });
 
+  const newRecoveryCode = () =>
+    run("recovery", async () => {
+      if (!config?.recoveryScopePolicy) throw new Error("Set RECOVERY_SCOPE_POLICY (npm run recovery:deploy) and restart the guardian service");
+      const r = await replaceRecovery(config.recoveryScopePolicy);
+      setNewCode(r.code);
+      if (r.warning) setError(r.warning);
+      else setNotice(`New recovery code (rule #${r.code.ruleId}). The old code no longer works.`);
+    });
+
   const recover = (code: string) =>
     run("recovery", async () => {
       const r = await recoverWallet(code, setNotice);
@@ -416,7 +425,7 @@ export default function App() {
                   {busy === "connect" ? "Connecting…" : "Use existing passkey"}
                 </button>
               </div>
-              <RecoveryBox account={null} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={null} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
+              <RecoveryBox account={null} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={null} onSetup={makeRecoveryCode} onReplace={newRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
             </>
           ) : (
             <dl className="facts">
@@ -438,7 +447,7 @@ export default function App() {
             </dl>
           )}
           {account && (
-            <RecoveryBox account={account} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={newCode} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
+            <RecoveryBox account={account} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={newCode} onSetup={makeRecoveryCode} onReplace={newRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
           )}
         </div>
       </section>

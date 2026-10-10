@@ -83,10 +83,17 @@ export function RecoveryPanel() {
 
   if (s.recoveryRule !== undefined) {
     return (
-      <p className="small muted">
-        {s.recovered ? "This device's passkey was added with your recovery code. " : ""}Recovery code set up (rule #{s.recoveryRule}: it can only
-        add a passkey to this account).
-      </p>
+      <div className="recovery">
+        <p className="small muted">
+          {s.recovered ? "This device's passkey was added with your recovery code. " : ""}Recovery code set up (rule #{s.recoveryRule}: it can
+          only add a passkey to this account). It is shown only once; if you didn't save it, or think someone else has it, make a new one.
+        </p>
+        {available && (
+          <button className="secondary small" onClick={() => void s.replaceRecovery()} disabled={busy}>
+            Make a new recovery code
+          </button>
+        )}
+      </div>
     );
   }
 
