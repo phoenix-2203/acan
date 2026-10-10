@@ -20,7 +20,7 @@
     "version": "0.3"
   },
   "cosignerGatePolicy": "CDFMTQUF5EKXKCXXXN2UYZUXM2CUYMIHXNTJQF33ZNR2OAHWMYFRIOLP",
-  "recoveryScopePolicy": "CAEBWX4A6XOT7SAY65ODPAJSGNGPGFJDAX7LY6FZG3B2UCM6MVKKKW44",
+  "recoveryScopePolicy": "CABSWUM6ODQEQOQ4TAO6NDYKVBK27SMT7COIR5VSFNTRPM3GBUJ6QCV4",
   "cosignerUrl": "https://acan-demo.duckdns.org/cosigner",
   "aiRelay": "https://acan-ai.duckdns.org"
 }
