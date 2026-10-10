@@ -12,12 +12,21 @@ import {
 import { ASSETS, GUARDIAN_RULE_ID, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
 import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
 
+/** The rule holding this browser's passkey: #0, or its own rule after a recovery. */
+let guardianRule = GUARDIAN_RULE_ID;
+export function setGuardianRule(id: number): void {
+  guardianRule = id;
+}
+export function getGuardianRule(): number {
+  return guardianRule;
+}
+
 /**
- * Passkey-signed changes always go under the guardian's own rule (#0). Named
- * explicitly: a recovery rule is also scoped to this account, so the kit could
- * otherwise not tell which rule to use.
+ * Passkey-signed changes name this browser's passkey rule explicitly: a recovery
+ * rule is also scoped to this account, so the kit could otherwise not tell which
+ * rule to use.
  */
-const GUARDIAN_ONLY = { resolveContextRuleIds: () => [GUARDIAN_RULE_ID] };
+export const guardianOnly = () => ({ resolveContextRuleIds: () => [guardianRule] });
 
 /** Passkey credentials of this browser (shared with the kit). */
 export const storage = new IndexedDBStorage();
@@ -153,7 +162,7 @@ export async function grantAgent(
     validUntil,
   );
   const simulated = tx.result as ContextRule | undefined;
-  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+  const result = await kit.signAndSubmitAdmin(tx, guardianOnly());
   if (!result.success) throw new Error(result.error?.message ?? "Rule creation failed");
 
   // get_context_rules_count is the number of live rules, not the next id
@@ -216,7 +225,7 @@ export async function revokeAgent(ruleId: number): Promise<void> {
   const account = kit.contractId;
   if (!account) throw new Error("Connect the guardian wallet first");
   const tx = await kit.rules.remove(ruleId);
-  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+  const result = await kit.signAndSubmitAdmin(tx, guardianOnly());
   if (!result.success) throw new Error(result.error?.message ?? "Revoke failed");
   saveGrants(account, loadGrants(account).filter((g) => g.ruleId !== ruleId));
 }

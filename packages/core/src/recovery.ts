@@ -4,15 +4,18 @@
  * A recovery key is an ed25519 key made in the guardian's browser and added to
  * the smart account under its own context rule: scoped to the account's own
  * address and narrowed by ACAN's recovery scope policy
- * (contracts/recovery-scope-policy) to one action, adding a signer to the
- * guardian's rule (#0). It cannot pay, call `execute`, or upgrade the account.
+ * (contracts/recovery-scope-policy) to one action: adding one passkey under a
+ * new rule of its own. It cannot pay, call `execute`, upgrade the account, or
+ * change existing rules.
  *
  * The recovery code carries everything needed on a new device: the account,
  * the recovery rule's id, and the key. On a new device the guardian creates a
- * passkey and the code adds it to rule #0.
+ * passkey and the code gives it its own rule. (Adding it to the guardian's
+ * existing rule would lock that rule: OpenZeppelin requires every signer of a
+ * rule without policies to sign.)
  */
 import { Buffer } from "buffer";
-import { Keypair, StrKey, contract, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
+import { Address, Keypair, StrKey, contract, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { SmartAccountAgentSigner, entryAddress } from "./agent-signer.js";
 import { OZ_SMART_ACCOUNT, TESTNET } from "./config.js";
 import { describeSimulationError } from "./errors.js";
@@ -62,10 +65,21 @@ export function recoveryPublicKey(c: RecoveryCode): Buffer {
 
 /**
  * Install parameters of the recovery scope policy: the Soroban struct
- * `RecoveryScopeParams { admin_rule_id: u32 }`, a map keyed by field name.
+ * `RecoveryScopeParams { passkey_verifier: Address }`, a map keyed by field name.
  */
-export function recoveryScopeParams(adminRuleId = GUARDIAN_RULE_ID): xdr.ScVal {
-  return xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("admin_rule_id"), val: xdr.ScVal.scvU32(adminRuleId) })]);
+export function recoveryScopeParams(passkeyVerifier: string = OZ_SMART_ACCOUNT.webauthnVerifier): xdr.ScVal {
+  return xdr.ScVal.scvMap([new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("passkey_verifier"), val: new Address(passkeyVerifier).toScVal() })]);
+}
+
+/** The arguments of `add_context_rule(Default, name, None, [signer], {})`. */
+export function newPasskeyRuleArgs(signer: xdr.ScVal, name = "recovered passkey"): xdr.ScVal[] {
+  return [
+    xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Default")]),
+    nativeToScVal(name, { type: "string" }),
+    xdr.ScVal.scvVoid(),
+    xdr.ScVal.scvVec([signer]),
+    xdr.ScVal.scvMap([]),
+  ];
 }
 
 /** The text of the downloadable .txt file. */
@@ -80,7 +94,7 @@ export function recoveryFileText(c: RecoveryCode, opts: { network?: string; site
     `Recovery rule: #${c.ruleId}`,
     "",
     "Your passkey lives on one device. If that device is lost, this code adds a new",
-    "passkey to your account from another device" + (opts.site ? ` (${opts.site})` : "") + ".",
+    "passkey for your account from another device" + (opts.site ? ` (${opts.site})` : "") + ".",
     "",
     "Keep it offline. The code cannot pay from your account on its own, but anyone",
     "holding it could add their own passkey and take over the account. Treat it like a key.",
@@ -89,9 +103,9 @@ export function recoveryFileText(c: RecoveryCode, opts: { network?: string; site
 }
 
 /**
- * Adds `signer` (a new passkey) to the guardian's rule, authorized by the
- * recovery key under the recovery rule. `source` only pays the network fee.
- * Returns the transaction hash.
+ * Gives `signer` (a new passkey) a rule of its own on the account, authorized
+ * by the recovery key under the recovery rule. `source` only pays the network
+ * fee. Returns the transaction hash and the new passkey's rule id.
  */
 export async function recoverWithCode(opts: {
   code: RecoveryCode;
@@ -101,7 +115,7 @@ export async function recoverWithCode(opts: {
   rpcUrl?: string;
   networkPassphrase?: string;
   ed25519Verifier?: string;
-}): Promise<string> {
+}): Promise<{ tx: string; ruleId: number }> {
   const { code, source } = opts;
   const rpcUrl = opts.rpcUrl ?? TESTNET.rpcUrl;
   const networkPassphrase = opts.networkPassphrase ?? TESTNET.networkPassphrase;
@@ -115,8 +129,8 @@ export async function recoverWithCode(opts: {
 
   const tx = await contract.AssembledTransaction.build({
     contractId: code.account,
-    method: "add_signer",
-    args: [nativeToScVal(GUARDIAN_RULE_ID, { type: "u32" }), opts.signer],
+    method: "add_context_rule",
+    args: newPasskeyRuleArgs(opts.signer),
     networkPassphrase,
     rpcUrl,
     publicKey: source.publicKey(),
@@ -138,9 +152,13 @@ export async function recoverWithCode(opts: {
   // Enforcing simulation: runs __check_auth and the recovery scope policy.
   await tx.simulate();
   if (rpc.Api.isSimulationError(tx.simulation!)) throw new Error(`Recovery refused: ${describeSimulationError(tx.simulation.error)}`);
+  const sim = tx.simulation as rpc.Api.SimulateTransactionSuccessResponse;
+  const rule = scValToNative(sim.result!.retval) as { id?: number | bigint };
+  const ruleId = Number(rule?.id);
+  if (!Number.isInteger(ruleId)) throw new Error("Could not read the new passkey's rule id");
 
   const sent = await tx.signAndSend({ signTransaction: contract.basicNodeSigner(source, networkPassphrase).signTransaction });
   const hash = sent.sendTransactionResponse?.hash;
   if (!hash) throw new Error("The recovery transaction was not submitted");
-  return hash;
+  return { tx: hash, ruleId };
 }

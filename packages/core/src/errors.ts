@@ -36,7 +36,7 @@ export const KNOWN_CODES: Record<number, string> = {
   3224: "HistoryCapacityExceeded: too many payments in this period for the spending-limit policy",
   3221: "SpendingLimitExceeded: the agent's allowance for this period is used up",
   3213: "NotAllowed: the provenance co-signer did not sign this payment",
-  3501: "RecoveryNotAllowed: a recovery key may only add a passkey to the guardian's rule",
+  3501: "RecoveryNotAllowed: a recovery key may only add one passkey under a new rule",
   3502: "RecoveryMissingSignature: the recovery key did not sign",
 };
 

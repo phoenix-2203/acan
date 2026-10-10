@@ -1,6 +1,6 @@
 //! The recovery rule checked by OpenZeppelin's own `do_check_auth`
 //! (stellar-accounts 0.7.2) with real ed25519 signatures: the recovery key can
-//! add a signer to the guardian's rule, and nothing else.
+//! add one passkey under a new rule of its own, and nothing else.
 extern crate std;
 
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -10,7 +10,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     vec,
     xdr::ToXdr,
-    Address, Bytes, BytesN, Env, IntoVal, Map, Symbol, Val, Vec,
+    Address, Bytes, BytesN, Env, IntoVal, Map, String, Symbol, Val, Vec,
 };
 use stellar_accounts::smart_account::{AuthPayload, ContextRule, ContextRuleType, Signer};
 
@@ -80,6 +80,7 @@ struct World {
     verifier: Address,
     policy: Address,
     token: Address,
+    passkey_verifier: Address,
     admin: SigningKey,
     recovery: SigningKey,
     admin_rule: u32,
@@ -98,14 +99,15 @@ fn world() -> World {
     let verifier = e.register(Ed25519Verifier, ());
     let policy = e.register(RecoveryScopePolicy, ());
     let token = Address::generate(&e);
+    let passkey_verifier = Address::generate(&e);
     let admin = key(1);
     let recovery = key(2);
-    let mut w = World { e, account, verifier, policy, token, admin, recovery, admin_rule: 0, recovery_rule: 0 };
+    let mut w = World { e, account, verifier, policy, token, passkey_verifier, admin, recovery, admin_rule: 0, recovery_rule: 0 };
     let client = AccountClient::new(&w.e, &w.account);
     // The guardian's rule (a passkey in production; an ed25519 key stands in for it here).
     w.admin_rule = client.add_rule(&ContextRuleType::Default, &vec![&w.e, w.signer(&w.admin)], &Map::new(&w.e)).id;
     // The recovery rule: scoped to the account's own address, narrowed by the policy.
-    let params: Val = RecoveryScopeParams { admin_rule_id: w.admin_rule }.into_val(&w.e);
+    let params: Val = RecoveryScopeParams { passkey_verifier: w.passkey_verifier.clone() }.into_val(&w.e);
     let rule: ContextRule = client.add_rule(
         &ContextRuleType::CallContract(w.account.clone()),
         &vec![&w.e, w.signer(&w.recovery)],
@@ -127,6 +129,24 @@ impl World {
     fn add_signer_ctx(&self, rule: u32) -> Context {
         let new_passkey = self.signer(&key(9));
         self.call(&self.account, "add_signer", vec![&self.e, rule.into_val(&self.e), new_passkey.into_val(&self.e)])
+    }
+
+    fn passkey(&self, seed: u8) -> Signer {
+        Signer::External(self.passkey_verifier.clone(), Bytes::from_array(&self.e, &[seed; 65]))
+    }
+
+    /// `add_context_rule(context_type, name, valid_until, signers, policies)` on the account.
+    fn new_rule_ctx(&self, context_type: ContextRuleType, valid_until: Option<u32>, signers: Vec<Signer>, policies: Map<Address, Val>) -> Context {
+        let e = &self.e;
+        self.call(
+            &self.account,
+            "add_context_rule",
+            vec![e, context_type.into_val(e), String::from_str(e, "recovered").into_val(e), valid_until.into_val(e), signers.into_val(e), policies.into_val(e)],
+        )
+    }
+
+    fn new_passkey_rule(&self) -> Context {
+        self.new_rule_ctx(ContextRuleType::Default, None, vec![&self.e, self.passkey(9)], Map::new(&self.e))
     }
 
     fn transfer_ctx(&self) -> Context {
@@ -156,9 +176,43 @@ impl World {
 }
 
 #[test]
-fn recovery_key_can_add_a_passkey_to_the_guardians_rule() {
+fn recovery_key_can_add_one_passkey_under_a_new_rule() {
     let w = world();
-    assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(w.admin_rule), &[&w.recovery]), Ok(()));
+    assert_eq!(w.check(w.recovery_rule, w.new_passkey_rule(), &[&w.recovery]), Ok(()));
+}
+
+#[test]
+fn the_new_rule_must_be_exactly_one_passkey_with_no_expiry_or_policies() {
+    let w = world();
+    let e = &w.e;
+    let one = vec![e, w.passkey(9)];
+    // Two signers, or a non-passkey signer (an ed25519 key the attacker holds).
+    assert_eq!(w.check(w.recovery_rule, w.new_rule_ctx(ContextRuleType::Default, None, vec![e, w.passkey(9), w.passkey(8)], Map::new(e)), &[&w.recovery]), Err(NOT_ALLOWED));
+    assert_eq!(w.check(w.recovery_rule, w.new_rule_ctx(ContextRuleType::Default, None, vec![e, w.signer(&key(7))], Map::new(e)), &[&w.recovery]), Err(NOT_ALLOWED));
+    // An expiry, a policy, or a narrower scope.
+    assert_eq!(w.check(w.recovery_rule, w.new_rule_ctx(ContextRuleType::Default, Some(2_000_000), one.clone(), Map::new(e)), &[&w.recovery]), Err(NOT_ALLOWED));
+    let p: Val = 1u32.into_val(e);
+    assert_eq!(w.check(w.recovery_rule, w.new_rule_ctx(ContextRuleType::Default, None, one.clone(), map![e, (w.token.clone(), p)]), &[&w.recovery]), Err(NOT_ALLOWED));
+    assert_eq!(w.check(w.recovery_rule, w.new_rule_ctx(ContextRuleType::CallContract(w.token.clone()), None, one, Map::new(e)), &[&w.recovery]), Err(NOT_ALLOWED));
+}
+
+#[test]
+fn the_same_arguments_to_any_other_function_are_refused() {
+    let w = world();
+    let Context::Contract(c) = w.new_passkey_rule() else { unreachable!() };
+    let other = w.call(&w.account, "execute", c.args);
+    assert_eq!(w.check(w.recovery_rule, other, &[&w.recovery]), Err(NOT_ALLOWED));
+}
+
+#[test]
+fn a_second_signer_on_the_guardians_rule_would_lock_it() {
+    // Why recovery makes a new rule: OpenZeppelin requires every signer of a rule
+    // without policies, so the guardian alone could no longer use a two-signer rule.
+    let w = world();
+    let client = AccountClient::new(&w.e, &w.account);
+    let both = client.add_rule(&ContextRuleType::Default, &vec![&w.e, w.signer(&w.admin), w.signer(&key(4))], &Map::new(&w.e)).id;
+    assert_eq!(w.check(both, w.transfer_ctx(), &[&w.admin]), Err(UNVALIDATED_CONTEXT));
+    assert_eq!(w.check(both, w.transfer_ctx(), &[&w.admin, &key(4)]), Ok(()));
 }
 
 #[test]
@@ -183,11 +237,11 @@ fn recovery_key_cannot_upgrade_or_change_other_rules() {
     let e = &w.e;
     let upgrade = w.call(&w.account, "upgrade", vec![e, BytesN::from_array(e, &[0u8; 32]).into_val(e)]);
     assert_eq!(w.check(w.recovery_rule, upgrade, &[&w.recovery]), Err(NOT_ALLOWED));
-    // Adding a signer to any rule but the guardian's (here: the recovery rule itself).
+    // Adding a signer to an existing rule (the guardian's, or the recovery rule itself).
+    assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(w.admin_rule), &[&w.recovery]), Err(NOT_ALLOWED));
     assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(w.recovery_rule), &[&w.recovery]), Err(NOT_ALLOWED));
-    assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(42), &[&w.recovery]), Err(NOT_ALLOWED));
-    let new_rule = w.call(&w.account, "add_context_rule", vec![e, ContextRuleType::Default.into_val(e)]);
-    assert_eq!(w.check(w.recovery_rule, new_rule, &[&w.recovery]), Err(NOT_ALLOWED));
+    let policy = w.call(&w.account, "add_policy", vec![e, w.admin_rule.into_val(e), w.token.into_val(e), 1u32.into_val(e)]);
+    assert_eq!(w.check(w.recovery_rule, policy, &[&w.recovery]), Err(NOT_ALLOWED));
     let remove = w.call(&w.account, "remove_signer", vec![e, w.admin_rule.into_val(e), w.signer(&w.admin).into_val(e)]);
     assert_eq!(w.check(w.recovery_rule, remove, &[&w.recovery]), Err(NOT_ALLOWED));
 }
@@ -196,10 +250,10 @@ fn recovery_key_cannot_upgrade_or_change_other_rules() {
 fn recovery_rule_needs_the_recovery_signature() {
     let w = world();
     // No signature at all: OpenZeppelin leaves this to the policy, which refuses.
-    assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(w.admin_rule), &[]), Err(MISSING_SIGNATURE));
+    assert_eq!(w.check(w.recovery_rule, w.new_passkey_rule(), &[]), Err(MISSING_SIGNATURE));
     // Someone else's key is not a signer of the rule and is refused by OpenZeppelin.
     let other = key(5);
-    assert_eq!(w.check(w.recovery_rule, w.add_signer_ctx(w.admin_rule), &[&other]), Err(3016)); // UnauthorizedSigner
+    assert_eq!(w.check(w.recovery_rule, w.new_passkey_rule(), &[&other]), Err(3016)); // UnauthorizedSigner
 }
 
 #[test]
@@ -212,7 +266,7 @@ fn guardian_rule_is_unchanged() {
 #[test]
 fn policy_installs_only_on_a_rule_scoped_to_the_account_itself() {
     let w = world();
-    let params: Val = RecoveryScopeParams { admin_rule_id: w.admin_rule }.into_val(&w.e);
+    let params: Val = RecoveryScopeParams { passkey_verifier: w.passkey_verifier.clone() }.into_val(&w.e);
     let client = AccountClient::new(&w.e, &w.account);
     for scope in [ContextRuleType::Default, ContextRuleType::CallContract(w.token.clone())] {
         let r = client.try_add_rule(&scope, &vec![&w.e, w.signer(&key(3))], &map![&w.e, (w.policy.clone(), params.clone())]);
@@ -223,16 +277,18 @@ fn policy_installs_only_on_a_rule_scoped_to_the_account_itself() {
 
 /// The install parameters as XDR, pinned so the TypeScript encoder
 /// (packages/core/src/recovery.ts `recoveryScopeParams`) is checked against it.
-pub const PARAMS_ADMIN_0_XDR_HEX: &str = "0000001100000001000000010000000f0000000d61646d696e5f72756c655f69640000000000000300000000";
+/// With the testnet WebAuthn verifier (OZ_SMART_ACCOUNT.webauthnVerifier).
+pub const PARAMS_XDR_HEX: &str = "0000001100000001000000010000000f00000010706173736b65795f76657269666965720000001200000001be4520f07ee6de081180da3f088ec6a975dac2d5fa63cc7d6ac13f84dd33f287";
 
 #[test]
 fn install_params_encoding_matches_the_typescript_encoder() {
     let e = Env::default();
-    let v: Val = RecoveryScopeParams { admin_rule_id: 0 }.into_val(&e);
+    let verifier = Address::from_str(&e, "CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F");
+    let v: Val = RecoveryScopeParams { passkey_verifier: verifier }.into_val(&e);
     let bytes = v.to_xdr(&e);
     let mut hex = std::string::String::new();
     for b in bytes.iter() {
         hex.push_str(&std::format!("{:02x}", b));
     }
-    assert_eq!(hex, PARAMS_ADMIN_0_XDR_HEX);
+    assert_eq!(hex, PARAMS_XDR_HEX);
 }

@@ -1,13 +1,12 @@
 /**
  * Recovery codes for the guardian wallet (the same design as the demo site):
  * a recovery key under its own rule, scoped to the account's own address and
- * limited by ACAN's recovery scope policy to adding a signer to the guardian's
- * rule (#0). It can never pay. On a new device the code adds a new passkey.
+ * limited by ACAN's recovery scope policy to giving one new passkey a rule of
+ * its own. It can never pay.
  */
 import { Keypair } from "@stellar/stellar-sdk";
 import { createCallContractContext, createEd25519Signer, createWebAuthnSigner, signerToScVal, type ContextRule, type StoredCredential } from "smart-account-kit";
 import {
-  GUARDIAN_RULE_ID,
   OZ_SMART_ACCOUNT,
   RECOVERY_RULE_NAME,
   TESTNET,
@@ -16,14 +15,9 @@ import {
   recoveryScopeParams,
   type RecoveryCode,
 } from "@acan/core/browser";
-import { kit, storage } from "./acan";
+import { guardianOnly, kit, setGuardianRule, storage } from "./acan";
 
-/**
- * Passkey-signed changes always go under the guardian's own rule (#0). Named
- * explicitly: a recovery rule is also scoped to this account, so the kit could
- * otherwise not tell which rule to use.
- */
-const GUARDIAN_ONLY = { resolveContextRuleIds: () => [GUARDIAN_RULE_ID] };
+
 
 const RECOVERED = "acan-recovered-passkey";
 const RULES = "acan-recovery-rules";
@@ -31,6 +25,8 @@ const RULES = "acan-recovery-rules";
 interface Recovered {
   contractId: string;
   credentialId: string;
+  /** The new passkey's own rule. */
+  guardianRule: number;
 }
 
 function readJson<T>(key: string): T | null {
@@ -73,7 +69,9 @@ export function recoveredPasskey(): Recovered | null {
 export function connectRecovered(): string | null {
   const r = recoveredPasskey();
   if (!r) return null;
+  if (!Number.isInteger(r.guardianRule)) return null;
   (kit as unknown as { setConnectedState(c: string, k: string): void }).setConnectedState(r.contractId, r.credentialId);
+  setGuardianRule(r.guardianRule);
   return r.contractId;
 }
 
@@ -86,10 +84,10 @@ export async function setupRecovery(policy: string): Promise<RecoveryCode> {
     createCallContractContext(account),
     RECOVERY_RULE_NAME,
     [createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, key.rawPublicKey())],
-    new Map<string, unknown>([[policy, recoveryScopeParams(GUARDIAN_RULE_ID)]]),
+    new Map<string, unknown>([[policy, recoveryScopeParams()]]),
   );
   const simulated = tx.result as ContextRule | undefined;
-  const result = await kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+  const result = await kit.signAndSubmitAdmin(tx, guardianOnly());
   if (!result.success) throw new Error(result.error?.message ?? "The recovery rule was not created");
   if (typeof simulated?.id !== "number") throw new Error("The recovery rule was created but its id could not be read; check the account's rules before relying on the code");
   rememberRule(account, simulated.id);
@@ -109,7 +107,7 @@ export async function replaceRecovery(policy: string): Promise<{ code: RecoveryC
   try {
     const rule = (await kit.rules.get(old)).result;
     if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
-    const res = await kit.signAndSubmitAdmin(await kit.rules.remove(old), GUARDIAN_ONLY);
+    const res = await kit.signAndSubmitAdmin(await kit.rules.remove(old), guardianOnly());
     if (!res.success) throw new Error(res.error?.message ?? "not removed");
     return { code };
   } catch (e) {
@@ -130,7 +128,7 @@ export async function recoverWallet(codeText: string, progress: (m: string) => v
   }).createPasskey("ACAN", "guardian (recovered)");
   const signer = createWebAuthnSigner(OZ_SMART_ACCOUNT.webauthnVerifier, created.publicKey, created.credentialId);
   progress("Adding the new passkey to your account with the recovery code…");
-  const tx = await recoverWithCode({ code, signer: signerToScVal(signer), source: fee });
+  const { tx, ruleId } = await recoverWithCode({ code, signer: signerToScVal(signer), source: fee });
   await storage.save({
     credentialId: created.credentialId,
     publicKey: created.publicKey,
@@ -139,11 +137,11 @@ export async function recoverWallet(codeText: string, progress: (m: string) => v
     createdAt: Date.now(),
     transports: created.rawResponse.response.transports,
     isPrimary: false,
-    contextRuleId: GUARDIAN_RULE_ID,
+    contextRuleId: ruleId,
     deploymentStatus: "deployed",
     associationVerified: true,
   } as StoredCredential);
-  writeJson(RECOVERED, { contractId: code.account, credentialId: created.credentialId });
+  writeJson(RECOVERED, { contractId: code.account, credentialId: created.credentialId, guardianRule: ruleId });
   rememberRule(code.account, code.ruleId);
   connectRecovered();
   return { account: code.account, tx };

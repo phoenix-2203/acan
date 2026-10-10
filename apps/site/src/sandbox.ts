@@ -58,12 +58,6 @@ import { contextRules, latestLedger, read, u32 } from "./chain";
 import { DEPLOYMENT } from "./deployment";
 import { encodeAllowlistV1 } from "./policy-v1";
 
-/**
- * Passkey-signed changes always go under the guardian's own rule (#0). Named
- * explicitly: a recovery rule is also scoped to this account, so the kit could
- * otherwise not tell which rule to use.
- */
-const GUARDIAN_ONLY = { resolveContextRuleIds: () => [GUARDIAN_RULE_ID] };
 
 export const XLM = ASSETS.xlm.sac;
 const STORE = "acan-sandbox-v1";
@@ -121,6 +115,8 @@ interface Saved {
   recovery?: { ruleId: number };
   /** This browser's passkey was added with a recovery code (not the wallet's first passkey). */
   recovered?: boolean;
+  /** The rule that holds this browser's passkey: #0 for the wallet's first passkey, its own rule after a recovery. */
+  guardianRule?: number;
 }
 
 export type Outcome =
@@ -238,6 +234,9 @@ export class Sandbox {
     this.state.contractId = res.contractId;
     this.state.credentialId = res.credentialId;
     this.state.grant = undefined;
+    this.state.guardianRule = undefined;
+    this.state.recovered = undefined;
+    this.state.recovery = undefined;
     save(this.state);
     if (res.fundResult && !res.fundResult.success) {
       progress("Wallet created. Friendbot funding failed; use “Add testnet XLM”.");
@@ -257,6 +256,16 @@ export class Sandbox {
       return;
     }
     await this.kit.connectWallet({ contractId: this.state.contractId, credentialId: this.state.credentialId });
+  }
+
+  /**
+   * Passkey-signed changes name this browser's passkey rule explicitly: a recovery
+   * rule is also scoped to this account, so the kit could otherwise not tell which
+   * rule to use.
+   */
+  private guardianOnly() {
+    const id = this.state.guardianRule ?? GUARDIAN_RULE_ID;
+    return { resolveContextRuleIds: () => [id] };
   }
 
   get recovery(): { ruleId: number } | undefined {
@@ -285,10 +294,10 @@ export class Sandbox {
       createCallContractContext(account),
       RECOVERY_RULE_NAME,
       [signer],
-      new Map<string, unknown>([[policy, recoveryScopeParams(GUARDIAN_RULE_ID)]]),
+      new Map<string, unknown>([[policy, recoveryScopeParams()]]),
     );
     const simulated = tx.result as ContextRule | undefined;
-    const result = await this.kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+    const result = await this.kit.signAndSubmitAdmin(tx, this.guardianOnly());
     if (!result.success) throw new Error(result.error?.message ?? "The recovery rule was not created");
     const ruleId =
       typeof simulated?.id === "number"
@@ -313,7 +322,7 @@ export class Sandbox {
       const rule = (await this.kit.rules.get(old)).result;
       if (rule.name !== RECOVERY_RULE_NAME) return { code, warning: `Rule #${old} is not a recovery rule, so it was left alone.` };
       progress("Switch off the old code: approve with your passkey…");
-      const res = await this.kit.signAndSubmitAdmin(await this.kit.rules.remove(old), GUARDIAN_ONLY);
+      const res = await this.kit.signAndSubmitAdmin(await this.kit.rules.remove(old), this.guardianOnly());
       if (!res.success) throw new Error(res.error?.message ?? "not removed");
       return { code };
     } catch (e) {
@@ -335,7 +344,7 @@ export class Sandbox {
     }).createPasskey("ACAN sandbox", `Recovered guardian ${new Date().toLocaleDateString()}`);
     const signer = createWebAuthnSigner(OZ_SMART_ACCOUNT.webauthnVerifier, created.publicKey, created.credentialId);
     progress("Adding the new passkey to your account with the recovery code…");
-    const hash = await recoverWithCode({ code, signer: signerToScVal(signer), source: this.deployer });
+    const { tx: hash, ruleId } = await recoverWithCode({ code, signer: signerToScVal(signer), source: this.deployer });
     await this.storage.save({
       credentialId: created.credentialId,
       publicKey: created.publicKey,
@@ -344,10 +353,11 @@ export class Sandbox {
       createdAt: Date.now(),
       transports: created.rawResponse.response.transports,
       isPrimary: false,
-      contextRuleId: GUARDIAN_RULE_ID,
+      contextRuleId: ruleId,
       deploymentStatus: "deployed",
       associationVerified: true,
     } as StoredCredential);
+    this.state.guardianRule = ruleId;
     this.state.contractId = code.account;
     this.state.credentialId = created.credentialId;
     this.state.recovered = true;
@@ -409,7 +419,7 @@ export class Sandbox {
     progress("Approve the new rule with your passkey…");
     const tx = await this.kit.rules.add(createCallContractContext(XLM), "sandbox-agent", s.gate ? [signer, cosignerSigner] : [signer], policies, validUntil);
     const simulated = tx.result as ContextRule | undefined;
-    const result = await this.kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+    const result = await this.kit.signAndSubmitAdmin(tx, this.guardianOnly());
     if (!result.success) throw new Error(result.error?.message ?? "The rule was not created");
     // Rule ids stay sparse after revocations, so the count is not the new id:
     // fall back to finding the agent's rule on-chain.
@@ -617,7 +627,7 @@ export class Sandbox {
    */
   async approveOnce(to: string, amount: bigint): Promise<Outcome> {
     await this.connect();
-    const r = await this.kit.transfer(XLM, to, Number(amount) / 1e7, GUARDIAN_ONLY);
+    const r = await this.kit.transfer(XLM, to, Number(amount) / 1e7, this.guardianOnly());
     return r.success
       ? { ok: true, tx: r.hash }
       : { ok: false, refused: false, code: contractErrorCode(r.error), reason: r.error?.message ?? "Approval failed" };
@@ -629,7 +639,7 @@ export class Sandbox {
     if (!g) return;
     await this.connect();
     const tx = await this.kit.rules.remove(g.ruleId);
-    const r = await this.kit.signAndSubmitAdmin(tx, GUARDIAN_ONLY);
+    const r = await this.kit.signAndSubmitAdmin(tx, this.guardianOnly());
     if (!r.success) throw new Error(r.error?.message ?? "Revoke failed");
     this.state.grant = { ...g, revoked: true };
     save(this.state);

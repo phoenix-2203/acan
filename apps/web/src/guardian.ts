@@ -1,6 +1,6 @@
 import { xdr } from "@stellar/stellar-sdk";
 import { checkRequest as checkEntry } from "./approval-check";
-import { kit } from "./acan";
+import { getGuardianRule, kit } from "./acan";
 
 /** The local guardian service (npm run guardian). */
 export const GUARDIAN_URL = (import.meta as any).env?.VITE_GUARDIAN_URL ?? "http://127.0.0.1:4030";
@@ -61,7 +61,7 @@ export async function fetchAudit(): Promise<AuditReport> {
  */
 export async function approve(a: Approval): Promise<void> {
   const entry = xdr.SorobanAuthorizationEntry.fromXDR(a.entryXdr, "base64");
-  const signed = await kit.signAuthEntry(entry, { expiration: a.maxLedger, contextRuleIds: [GUARDIAN_RULE_ID] });
+  const signed = await kit.signAuthEntry(entry, { expiration: a.maxLedger, contextRuleIds: [getGuardianRule()] });
   const r = await fetch(`${GUARDIAN_URL}/approvals/${a.id}/approve`, {
     method: "POST",
     headers: { "content-type": "application/json" },

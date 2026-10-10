@@ -451,16 +451,21 @@ guardian's own browser before the passkey signs anything.
 - **Recovery code** (`contracts/recovery-scope-policy`). Right after the wallet is
   created (demo site and dashboard), one more passkey approval adds a recovery key
   under its own rule. The rule is scoped to the account's own address, and ACAN's
-  recovery scope policy narrows it to a single action: adding a signer to the
-  guardian's rule (#0). It refuses everything else the account can be asked to do,
-  including `execute` (which would let it make any call as the account, such as a
-  payment) and `upgrade` (#3501), and it requires the recovery key's own signature
-  (#3502). The code (`acan-recovery-1:<rule>:<account>:<key>`) is shown once, to copy
-  or download, and is not stored. On a new device, "Lost your device? Recover with
-  your code" creates a passkey there and the code adds it to the account. Anyone
-  holding the code could do the same, so it is treated like a key. Proven in the
-  Soroban host against OpenZeppelin's own `do_check_auth` with real signatures
-  (8 tests). Deploy once with `npm run recovery:deploy`.
+  recovery scope policy narrows it to a single action: giving one new passkey a rule
+  of its own (no expiry, no policies, exactly one WebAuthn signer). It refuses
+  everything else the account can be asked to do, including `execute` (which would
+  let it make any call as the account, such as a payment), `upgrade`, and changes to
+  existing rules (#3501), and it requires the recovery key's own signature (#3502).
+  The new passkey gets its own rule because OpenZeppelin requires every signer of a
+  rule without policies to sign: a second passkey on the guardian's rule would lock
+  that rule for both devices (a test shows this). The code
+  (`acan-recovery-1:<rule>:<account>:<key>`) is shown once, to copy or download, and
+  is not stored; "Make a new recovery code" replaces it and removes the old rule. On a
+  new device, "Lost your device? Recover with your code" creates a passkey there and
+  the code gives it its rule. Anyone holding the code could do the same, so it is
+  treated like a key. Proven in the Soroban host against OpenZeppelin's own
+  `do_check_auth` with real signatures (11 tests). Deploy once with
+  `npm run recovery:deploy`.
 - **Private-spending panel.** The dashboard shows each confidential settlement
   twice: what the public sees ("hidden") and what the guardian's auditor key
   decrypts, locally on the guardian's machine.
@@ -672,13 +677,11 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   held for you by design.
 - **Sub-agents.** Their authority is enforced by the co-signer, not by a contract of
   their own: sub-agents hold no key on the account.
-- **Recovery codes.** The code can add a passkey to the guardian's rule, so whoever
-  holds it can take the account over in two steps; it cannot pay in one. A passkey
-  added with a code is connected by the app directly (the kit's birth check covers
-  only a wallet's first passkey); the account and passkey come from the guardian's own
-  code and are looked up on-chain when signing. Run on testnet on 10 Oct 2026: a code
-  made on the demo site recovered the wallet in a separate browser, whose new passkey
-  then granted an agent allowance.
+- **Recovery codes.** The code can give a new passkey its own rule, so whoever holds
+  it can take the account over in two steps; it cannot pay in one. A passkey added
+  with a code is connected by the app directly (the kit's birth check covers only a
+  wallet's first passkey); the account and passkey come from the guardian's own code
+  and are looked up on-chain when signing.
 - **Facilitator.** Smart-account payers currently need a facilitator with a
   higher fee ceiling and smart-account-aware event checks (provided here).
 

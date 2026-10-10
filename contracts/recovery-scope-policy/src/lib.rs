@@ -5,24 +5,29 @@
 //! the smart account's own address (`CallContract(account)`), and this policy
 //! narrows it to exactly one action:
 //!
-//! - `add_signer(admin_rule_id, signer)` on the smart account itself, where
-//!   `admin_rule_id` is the guardian's own rule (the passkey's rule).
+//! - `add_context_rule(Default, name, None, [one passkey], {})` on the smart
+//!   account itself: a new rule for a new passkey, with no expiry, no
+//!   policies, and exactly one signer verified by the passkey (WebAuthn)
+//!   verifier.
+//!
+//! The new passkey gets a rule of its own rather than joining the guardian's
+//! existing rule: OpenZeppelin requires every signer of a rule without
+//! policies to sign, so a second passkey on the same rule would lock both
+//! devices out of it.
 //!
 //! Everything else the account's own address can do is refused, in
 //! particular `execute` (which would let the key make any call as the account,
-//! including a payment) and `upgrade`. A token transfer is a call to the token,
-//! not to the account, so the rule's context type already refuses it.
+//! including a payment), `upgrade`, and adding signers or policies to existing
+//! rules. A token transfer is a call to the token, not to the account, so the
+//! rule's context type already refuses it.
 //!
 //! With policies attached, OpenZeppelin leaves signer checks to the policies,
 //! so this policy also requires every signer on the rule to have signed.
-//!
-//! Recovery therefore means: on a new device, the key adds a new passkey to the
-//! guardian's rule. It can never pay from the account on its own.
 #![no_std]
 
 use soroban_sdk::{
     auth::{Context, ContractContext},
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address, Env, Symbol, TryFromVal, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address, Env, Map, Symbol, TryFromVal, Val, Vec,
 };
 use stellar_accounts::{
     policies::Policy,
@@ -34,7 +39,7 @@ use stellar_accounts::{
 #[repr(u32)]
 pub enum RecoveryScopeError {
     NotInstalled = 3500,
-    /// Anything other than adding a signer to the guardian's rule.
+    /// Anything other than adding one passkey under a new rule of its own.
     NotAllowed = 3501,
     /// A signer on the recovery rule did not sign.
     MissingSignature = 3502,
@@ -46,8 +51,8 @@ pub enum RecoveryScopeError {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct RecoveryScopeParams {
-    /// The guardian's own rule (the passkey's), the only rule the key may add a signer to.
-    pub admin_rule_id: u32,
+    /// The passkey (WebAuthn) verifier contract the new signer must use.
+    pub passkey_verifier: Address,
 }
 
 #[contracttype]
@@ -61,7 +66,7 @@ pub struct RecoveryScopeInstalled {
     #[topic]
     pub smart_account: Address,
     pub context_rule_id: u32,
-    pub admin_rule_id: u32,
+    pub passkey_verifier: Address,
 }
 
 #[contractevent]
@@ -88,10 +93,7 @@ impl Policy for RecoveryScopePolicy {
         }
         let allowed = match context {
             Context::Contract(ContractContext { contract, fn_name, args }) => {
-                contract == smart_account
-                    && fn_name == Symbol::new(e, "add_signer")
-                    && args.len() == 2
-                    && u32::try_from_val(e, &args.get_unchecked(0)).ok() == Some(params.admin_rule_id)
+                contract == smart_account && fn_name == Symbol::new(e, "add_context_rule") && is_one_new_passkey(e, &args, &params.passkey_verifier)
             }
             _ => false,
         };
@@ -110,7 +112,7 @@ impl Policy for RecoveryScopePolicy {
             panic_with_error!(e, RecoveryScopeError::AlreadyInstalled)
         }
         e.storage().persistent().set(&key, &install_params);
-        RecoveryScopeInstalled { smart_account, context_rule_id: context_rule.id, admin_rule_id: install_params.admin_rule_id }.publish(e);
+        RecoveryScopeInstalled { smart_account, context_rule_id: context_rule.id, passkey_verifier: install_params.passkey_verifier.clone() }.publish(e);
     }
 
     fn uninstall(e: &Env, context_rule: ContextRule, smart_account: Address) {
@@ -130,6 +132,21 @@ impl RecoveryScopePolicy {
     pub fn get_params(e: Env, context_rule_id: u32, smart_account: Address) -> RecoveryScopeParams {
         load_params(&e, &smart_account, context_rule_id)
     }
+}
+
+/// `add_context_rule(Default, _name, None, [External(passkey_verifier, _)], {})`.
+fn is_one_new_passkey(e: &Env, args: &Vec<Val>, passkey_verifier: &Address) -> bool {
+    if args.len() != 5 {
+        return false;
+    }
+    let Ok(context_type) = ContextRuleType::try_from_val(e, &args.get_unchecked(0)) else { return false };
+    let Ok(valid_until) = Option::<u32>::try_from_val(e, &args.get_unchecked(2)) else { return false };
+    let Ok(signers) = Vec::<Signer>::try_from_val(e, &args.get_unchecked(3)) else { return false };
+    let Ok(policies) = Map::<Address, Val>::try_from_val(e, &args.get_unchecked(4)) else { return false };
+    if context_type != ContextRuleType::Default || valid_until.is_some() || !policies.is_empty() || signers.len() != 1 {
+        return false;
+    }
+    matches!(signers.get_unchecked(0), Signer::External(verifier, _) if verifier == *passkey_verifier)
 }
 
 fn load_params(e: &Env, smart_account: &Address, rule_id: u32) -> RecoveryScopeParams {
