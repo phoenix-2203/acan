@@ -15,7 +15,7 @@
  * rule without policies to sign.)
  */
 import { Buffer } from "buffer";
-import { Address, Keypair, StrKey, contract, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { Account, Address, BASE_FEE, Keypair, Operation, StrKey, TransactionBuilder, contract, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { SmartAccountAgentSigner, entryAddress } from "./agent-signer.js";
 import { OZ_SMART_ACCOUNT, TESTNET } from "./config.js";
 import { describeSimulationError } from "./errors.js";
@@ -80,6 +80,36 @@ export function newPasskeyRuleArgs(signer: xdr.ScVal, name = "recovered passkey"
     xdr.ScVal.scvVec([signer]),
     xdr.ScVal.scvMap([]),
   ];
+}
+
+/**
+ * Whether a recovery rule still works with today's recovery policy:
+ * "ok"; "missing" (removed, e.g. replaced by a newer code); or "outdated" (made
+ * with an earlier version of the policy, which this app no longer uses).
+ */
+export async function recoveryRuleStatus(
+  account: string,
+  ruleId: number,
+  currentPolicy: string,
+  rpcUrl: string = TESTNET.rpcUrl,
+  networkPassphrase: string = TESTNET.networkPassphrase,
+): Promise<"ok" | "missing" | "outdated"> {
+  const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), "0"), { fee: BASE_FEE, networkPassphrase })
+    .addOperation(Operation.invokeContractFunction({ contract: account, function: "get_context_rule", args: [nativeToScVal(ruleId, { type: "u32" })] }))
+    .setTimeout(30)
+    .build();
+  const sim = await new rpc.Server(rpcUrl).simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) return "missing";
+  const rule = scValToNative((sim as rpc.Api.SimulateTransactionSuccessResponse).result!.retval) as { name?: string; policies?: unknown[] };
+  if (String(rule?.name) !== RECOVERY_RULE_NAME) return "missing";
+  return (rule.policies ?? []).map(String).includes(currentPolicy) ? "ok" : "outdated";
+}
+
+/** Plain words for a code that cannot be used. */
+export function recoveryStatusMessage(status: "missing" | "outdated"): string {
+  return status === "missing"
+    ? "This recovery code no longer works: it was replaced by a newer code, or removed. Use your newest code."
+    : "This recovery code was made with an earlier version of ACAN's recovery and can't be used any more. On a device that still has your passkey, press “Make a new recovery code”.";
 }
 
 /** The text of the downloadable .txt file. */

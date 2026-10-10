@@ -12,7 +12,9 @@ import {
   TESTNET,
   parseRecoveryCode,
   recoverWithCode,
+  recoveryRuleStatus,
   recoveryScopeParams,
+  recoveryStatusMessage,
   type RecoveryCode,
 } from "@acan/core/browser";
 import { guardianOnly, kit, setGuardianRule, storage } from "./acan";
@@ -116,8 +118,13 @@ export async function replaceRecovery(policy: string): Promise<{ code: RecoveryC
 }
 
 /** On a new device: create a passkey here and add it to the account with the recovery code. */
-export async function recoverWallet(codeText: string, progress: (m: string) => void): Promise<{ account: string; tx: string }> {
+export async function recoverWallet(codeText: string, progress: (m: string) => void, policy?: string | null): Promise<{ account: string; tx: string }> {
   const code = parseRecoveryCode(codeText);
+  if (policy) {
+    progress("Checking your recovery code on testnet…");
+    const status = await recoveryRuleStatus(code.account, code.ruleId, policy);
+    if (status !== "ok") throw new Error(recoveryStatusMessage(status));
+  }
   progress("Funding a throwaway testnet account to pay the fee…");
   const fee = Keypair.random();
   const r = await fetch(`${TESTNET.friendbotUrl}?addr=${encodeURIComponent(fee.publicKey())}`);

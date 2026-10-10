@@ -33,7 +33,9 @@ import {
   RECOVERY_RULE_NAME,
   parseRecoveryCode,
   recoverWithCode,
+  recoveryRuleStatus,
   recoveryScopeParams,
+  recoveryStatusMessage,
   type RecoveryCode,
   PaymentRejectedError,
   SmartAccountAgentSigner,
@@ -272,6 +274,14 @@ export class Sandbox {
     return this.state.recovery;
   }
 
+  /** Does this wallet's recovery rule still work with today's recovery policy? */
+  async recoveryStatus(): Promise<"ok" | "missing" | "outdated" | undefined> {
+    const r = this.state.recovery;
+    const policy = DEPLOYMENT.recoveryScopePolicy;
+    if (!r || !policy || !this.state.contractId) return undefined;
+    return recoveryRuleStatus(this.state.contractId, r.ruleId, policy).catch(() => undefined);
+  }
+
   get recovered(): boolean {
     return Boolean(this.state.recovered);
   }
@@ -336,6 +346,11 @@ export class Sandbox {
    */
   async recover(codeText: string, progress: (m: string) => void): Promise<string> {
     const code = parseRecoveryCode(codeText);
+    const policy = DEPLOYMENT.recoveryScopePolicy;
+    if (!policy) throw new Error("Recovery codes are not set up on this deployment yet.");
+    progress("Checking your recovery code on testnet…");
+    const status = await recoveryRuleStatus(code.account, code.ruleId, policy);
+    if (status !== "ok") throw new Error(recoveryStatusMessage(status));
     progress("Funding a throwaway testnet account to pay the fee…");
     await friendbot(this.deployer.publicKey());
     progress("Create a passkey for this device when your browser asks…");

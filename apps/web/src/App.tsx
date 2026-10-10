@@ -250,7 +250,7 @@ export default function App() {
 
   const recover = (code: string) =>
     run("recovery", async () => {
-      const r = await recoverWallet(code, setNotice);
+      const r = await recoverWallet(code, setNotice, config?.recoveryScopePolicy);
       setAccount(r.account);
       setNotice(`Recovered: this browser's new passkey was added to ${short(r.account, 6)} (tx ${r.tx.slice(0, 8)}…).`);
     });

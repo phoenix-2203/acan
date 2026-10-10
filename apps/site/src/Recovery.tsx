@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatRecoveryCode, recoveryFileText } from "@acan/core/browser";
 import { short } from "./chain";
 import { DEPLOYMENT } from "./deployment";
@@ -12,6 +12,15 @@ export function RecoveryPanel() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const available = Boolean(DEPLOYMENT.recoveryScopePolicy);
+  const [status, setStatus] = useState<"ok" | "missing" | "outdated" | undefined>();
+  useEffect(() => {
+    let on = true;
+    setStatus(undefined);
+    if (s.contractId && s.recoveryRule !== undefined && !s.newCode) void s.sb().recoveryStatus().then((x) => on && setStatus(x));
+    return () => {
+      on = false;
+    };
+  }, [s.contractId, s.recoveryRule, s.newCode]);
 
   if (!s.contractId) {
     if (!available) return null;
@@ -84,6 +93,13 @@ export function RecoveryPanel() {
   if (s.recoveryRule !== undefined) {
     return (
       <div className="recovery">
+        {status && status !== "ok" && (
+          <p className="recovery-warn">
+            {status === "outdated"
+              ? "Your recovery code was made with an earlier version of ACAN's recovery and no longer works. Make a new one now."
+              : "Your recovery rule is no longer on the account, so your saved code won't work. Make a new one now."}
+          </p>
+        )}
         <p className="small muted">
           {s.recovered ? "This device's passkey was added with your recovery code. " : ""}Recovery code set up (rule #{s.recoveryRule}: it can
           only add a passkey to this account). It is shown only once; if you didn't save it, or think someone else has it, make a new one.
