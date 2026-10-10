@@ -674,8 +674,9 @@ vendor/ctd-demo         brozorec/stellar-confidential-token-demo @ 9500ed7 (MIT)
   holds it can take the account over in two steps; it cannot pay in one. A passkey
   added with a code is connected by the app directly (the kit's birth check covers
   only a wallet's first passkey); the account and passkey come from the guardian's own
-  code and are looked up on-chain when signing. Not yet tested on testnet at the time
-  of writing.
+  code and are looked up on-chain when signing. Run on testnet on 10 Oct 2026: a code
+  made on the demo site recovered the wallet in a separate browser, whose new passkey
+  then granted an agent allowance.
 - **Facilitator.** Smart-account payers currently need a facilitator with a
   higher fee ceiling and smart-account-aware event checks (provided here).
 
