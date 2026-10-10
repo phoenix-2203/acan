@@ -80,6 +80,12 @@ co-signer; OZ weighted threshold 2; spending limit; merchant budget).
 - When the agent then signed that payment with its own key alone, the smart account
   refused it: `#3213`, NotAllowed, from the weighted-threshold policy.
 
+**Hosted co-signer** (10 Oct 2026). The demo site's co-signer runs on ACAN's server
+(`apps/cosigner/deploy`), apart from the agent's key in the browser. With it, on a new
+gated allowance: the clean task was co-signed and paid, the Tidewire task was held, the
+agent's key alone was refused (#3213), and the Agent team run behaved as specified,
+including the cancel.
+
 **Provenance gate for any AI client** (`npm run demo:gate`, ACAN's USDC account, gated
 rule #13):
 
