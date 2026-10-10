@@ -12,6 +12,9 @@ import {
 import { ASSETS, OZ_SMART_ACCOUNT, TESTNET, getEventsSince, stroopsToUsdc } from "@acan/core/browser";
 import { encodeMerchantPolicyParams, type RecipientCap } from "./merchant-policy";
 
+/** Passkey credentials of this browser (shared with the kit). */
+export const storage = new IndexedDBStorage();
+
 export const kit = new SmartAccountKit({
   rpcUrl: TESTNET.rpcUrl,
   networkPassphrase: TESTNET.networkPassphrase,
@@ -19,7 +22,7 @@ export const kit = new SmartAccountKit({
   webauthnVerifierAddress: OZ_SMART_ACCOUNT.webauthnVerifier,
   ed25519VerifierAddress: OZ_SMART_ACCOUNT.ed25519Verifier,
   relayerUrl: TESTNET.relayerUrl,
-  storage: new IndexedDBStorage(),
+  storage,
   rpName: "ACAN",
 });
 

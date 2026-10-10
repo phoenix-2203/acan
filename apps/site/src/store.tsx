@@ -4,7 +4,7 @@
  * this browser against Stellar testnet.
  */
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { explainRefusal, taskPlan, type Refusal, type SignedDelegation, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
+import { explainRefusal, taskPlan, type RecoveryCode, type Refusal, type SignedDelegation, type SignedReceipt, type SignedRequest, type Step } from "@acan/core/browser";
 import { SandboxAgent, type PayResult } from "./ai-agent";
 import { latestLedger, short, spendingLimit, units } from "./chain";
 import { DEPLOYMENT } from "./deployment";
@@ -74,6 +74,15 @@ interface Store {
   /** The signed receipt of the last Autopilot task (opened on the Receipts page). */
   receipt: SignedReceipt | null;
   setReceipt: (r: SignedReceipt | null) => void;
+  /** The recovery rule's id, once a recovery code exists for this wallet. */
+  recoveryRule?: number;
+  /** This browser's passkey was added with a recovery code. */
+  recovered: boolean;
+  /** A recovery code just made, shown once until the guardian confirms they saved it. */
+  newCode: RecoveryCode | null;
+  dismissCode: () => void;
+  setupRecovery: () => Promise<void>;
+  recover: (code: string) => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -104,6 +113,9 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
   const [log, setLog] = useState<LogLine[]>([]);
   const [refresh, setRefresh] = useState(0);
   const [receipt, setReceipt] = useState<SignedReceipt | null>(null);
+  const [recoveryRule, setRecoveryRule] = useState<number | undefined>(() => safe(() => sb().recovery?.ruleId));
+  const [recovered, setRecovered] = useState<boolean>(() => Boolean(safe(() => sb().recovered)));
+  const [newCode, setNewCode] = useState<RecoveryCode | null>(null);
   const seq = useRef(0);
   const contractRef = useRef(contractId);
   contractRef.current = contractId;
@@ -223,6 +235,13 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  async function makeCode() {
+    const code = await sb().setupRecovery((m) => setBusy(m));
+    setRecoveryRule(code.ruleId);
+    setNewCode(code);
+    add("info", `Recovery rule #${code.ruleId} added: its key can only add a passkey to your account, never pay. Save the code shown in step 1.`);
+  }
+
   const store: Store = {
     sb,
     contractId,
@@ -242,7 +261,24 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
         const id = await sb().createWallet((m) => setBusy(m));
         setContractId(id);
         setGrant(undefined);
+        setRecoveryRule(undefined);
+        setRecovered(false);
         add("info", `Smart account ${short(id, 6)} deployed and funded with testnet XLM.`);
+        if (DEPLOYMENT.recoveryScopePolicy) await makeCode();
+      }),
+    recoveryRule,
+    recovered,
+    newCode,
+    dismissCode: () => setNewCode(null),
+    setupRecovery: () => run("Setting up your recovery code…", makeCode),
+    recover: (code) =>
+      run("Recovering your wallet…", async () => {
+        const hash = await sb().recover(code, (m) => setBusy(m));
+        setContractId(sb().contractId);
+        setGrant(undefined);
+        setRecoveryRule(sb().recovery?.ruleId);
+        setRecovered(true);
+        add("info", `Recovered: a new passkey on this device was added to your account with the recovery code.`, { tx: hash });
       }),
     grantAgent: (s, summary) =>
       run("Granting the allowance…", async () => {
@@ -289,6 +325,9 @@ export function SandboxProvider({ children }: { children: ReactNode }) {
       if (busy) return;
       Sandbox.reset();
       sandbox.current = null;
+      setRecoveryRule(undefined);
+      setRecovered(false);
+      setNewCode(null);
       setContractId(undefined);
       setGrant(undefined);
       setLog([]);

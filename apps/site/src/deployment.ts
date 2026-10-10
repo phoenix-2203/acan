@@ -10,6 +10,8 @@ export interface Deployment {
   merchantPolicy?: { address: string; version: string };
   /** OpenZeppelin weighted-threshold policy that makes the provenance co-signer required. */
   cosignerGatePolicy?: string;
+  /** ACAN recovery scope policy: limits a recovery key to adding a signer to the guardian's rule. */
+  recoveryScopePolicy?: string;
   /** HTTPS address of the AI relay (apps/relay) for the sandbox's AI chat; no chat without it. */
   aiRelay?: string;
 }

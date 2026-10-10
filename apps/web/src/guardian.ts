@@ -93,6 +93,8 @@ export interface GuardianConfig {
   /** Provenance gate (newer guardian services): co-signer public key and the gate policy. */
   cosignerAddress?: string | null;
   cosignerGatePolicy?: string | null;
+  /** ACAN recovery scope policy (recovery codes). */
+  recoveryScopePolicy?: string | null;
   recipients: { address: string; label: string }[];
 }
 

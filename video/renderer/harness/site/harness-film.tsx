@@ -166,5 +166,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   return realFetch(input as any, init);
 };
 
+// Recovery-code screens (?recovery=1): the policy address and the chain calls are stand-ins.
+if (params.get("recovery")) {
+  (DEPLOYMENT as any).recoveryScopePolicy = StrKey.encodeContract(seed("recovery-policy"));
+  P.createWallet = async function (progress: (m: string) => void) {
+    progress("Creating…");
+    this.state.contractId = CONTRACT;
+    this.state.grant = undefined;
+    localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
+    return CONTRACT;
+  };
+  P.setupRecovery = async function () {
+    this.state.recovery = { ruleId: 3 };
+    localStorage.setItem("acan-sandbox-v1", JSON.stringify(this.state));
+    return { account: this.state.contractId, ruleId: 3, secret: kp("recovery").secret() };
+  };
+}
+
 const { default: App } = await import("./App");
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);

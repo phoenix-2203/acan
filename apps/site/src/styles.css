@@ -463,3 +463,13 @@ td:first-child { width: 48%; }
 .reveal { color: var(--accent); animation: rise 0.35s var(--ease) both; }
 @media (max-width: 700px) { .replay-stats { grid-template-columns: 1fr 1fr; } .replay-list li { grid-template-columns: 18px 1fr; } .replay-list li > a { grid-column: 2; } }
 .replay-list li.empty { display: block; }
+
+/* Recovery code (Wallet & allowance, step 1) */
+.recovery { margin-top: 10px; display: grid; gap: 8px; justify-items: start; }
+.recover-form { display: grid; gap: 8px; width: 100%; }
+.recover-form textarea { width: 100%; font-size: 13px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; }
+.recovery-card { margin-top: 14px; padding: 18px 20px; border: 1.5px solid var(--accent); border-radius: 14px; background: var(--accent-soft); display: grid; gap: 12px; justify-items: start; }
+.recovery-card h3 { margin: 0; }
+.recovery-card p { margin: 0; }
+.recovery-code { display: block; width: 100%; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px dashed var(--line-strong); font: 500 13px/1.5 "IBM Plex Mono", ui-monospace, monospace; word-break: break-all; user-select: all; }
+.recovery-warn { font-size: 14px; color: var(--warn); background: var(--warn-bg); padding: 10px 12px; border-radius: 10px; }

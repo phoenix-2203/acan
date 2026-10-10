@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ASSETS, LEDGERS_PER_DAY, LEDGERS_PER_HOUR, usdcToStroops } from "@acan/core/browser";
+import { ASSETS, LEDGERS_PER_DAY, LEDGERS_PER_HOUR, usdcToStroops, type RecoveryCode } from "@acan/core/browser";
 import {
   currentLedger,
   explorer,
@@ -35,12 +35,15 @@ import {
 import { auditCsv, auditJson, download } from "./audit-export";
 import { AgentChat } from "./AgentChat";
 import { TasksPanel } from "./TasksPanel";
+import { RecoveryBox } from "./RecoveryBox";
+import { connectRecovered, recoverWallet, setupRecovery } from "./recovery";
 import { PolicyComposer } from "./PolicyComposer";
 
 type Busy =
   | null
   | "create"
   | "connect"
+  | "recovery"
   | "grant"
   | `revoke-${number}`
   | "revoke-all"
@@ -92,6 +95,7 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
   const [budgets, setBudgets] = useState<BudgetRequest[]>([]);
   const [config, setConfig] = useState<GuardianConfig | null>(null);
+  const [newCode, setNewCode] = useState<RecoveryCode | null>(null);
   const [allowOnly, setAllowOnly] = useState<Record<string, boolean>>({});
   /** Per-recipient cap in USDC as typed ("" = no cap). */
   const [caps, setCaps] = useState<Record<string, string>>({});
@@ -107,6 +111,11 @@ export default function App() {
 
   // Silent restore of a previous passkey session.
   useEffect(() => {
+    const recovered = connectRecovered();
+    if (recovered) {
+      setAccount(recovered);
+      return;
+    }
     kit
       .connectWallet()
       .then((r) => r && setAccount(kit.contractId))
@@ -221,10 +230,29 @@ export default function App() {
       }
       setAccount(r.contractId);
       setNotice("Guardian wallet created. Your passkey is its only admin.");
+      if (config?.recoveryScopePolicy) setNewCode(await setupRecovery(config.recoveryScopePolicy));
+    });
+
+  const makeRecoveryCode = () =>
+    run("recovery", async () => {
+      if (!config?.recoveryScopePolicy) throw new Error("Set RECOVERY_SCOPE_POLICY (npm run recovery:deploy) and restart the guardian service");
+      setNewCode(await setupRecovery(config.recoveryScopePolicy));
+    });
+
+  const recover = (code: string) =>
+    run("recovery", async () => {
+      const r = await recoverWallet(code, setNotice);
+      setAccount(r.account);
+      setNotice(`Recovered: this browser's new passkey was added to ${short(r.account, 6)} (tx ${r.tx.slice(0, 8)}…).`);
     });
 
   const connect = () =>
     run("connect", async () => {
+      const recovered = connectRecovered();
+      if (recovered) {
+        setAccount(recovered);
+        return;
+      }
       await kit.connectWallet({ prompt: true });
       setAccount(kit.contractId);
     });
@@ -388,6 +416,7 @@ export default function App() {
                   {busy === "connect" ? "Connecting…" : "Use existing passkey"}
                 </button>
               </div>
+              <RecoveryBox account={null} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={null} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
             </>
           ) : (
             <dl className="facts">
@@ -407,6 +436,9 @@ export default function App() {
                 <dd className="mono big">{balance === null ? "—" : fmt(balance)}</dd>
               </div>
             </dl>
+          )}
+          {account && (
+            <RecoveryBox account={account} available={Boolean(config?.recoveryScopePolicy)} busy={busy !== null} newCode={newCode} onSetup={makeRecoveryCode} onRecover={recover} onSaved={() => setNewCode(null)} />
           )}
         </div>
       </section>

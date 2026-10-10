@@ -55,6 +55,11 @@ const next = {
     const gate = optionalPub("COSIGNER_GATE_POLICY") ?? (StrKey.isValidContract(previous.cosignerGatePolicy ?? "") ? previous.cosignerGatePolicy : undefined);
     return gate ? { cosignerGatePolicy: gate } : {};
   })(),
+  // Recovery scope policy, from .env or kept from before.
+  ...(() => {
+    const rec = optionalPub("RECOVERY_SCOPE_POLICY") ?? (StrKey.isValidContract(previous.recoveryScopePolicy ?? "") ? previous.recoveryScopePolicy : undefined);
+    return rec ? { recoveryScopePolicy: rec } : {};
+  })(),
   // The demo site's AI relay (apps/relay) is set by hand; keep it.
   ...(typeof previous.aiRelay === "string" && previous.aiRelay.startsWith("https://") ? { aiRelay: previous.aiRelay } : {}),
 };

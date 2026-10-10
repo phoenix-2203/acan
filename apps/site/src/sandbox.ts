@@ -20,11 +20,20 @@ import {
   createEd25519Signer,
   createSpendingLimitParams,
   createWeightedThresholdParams,
+  createWebAuthnSigner,
+  signerToScVal,
   type ContextRule,
+  type StoredCredential,
 } from "smart-account-kit";
 import {
   ASSETS,
+  GUARDIAN_RULE_ID,
   OZ_SMART_ACCOUNT,
+  RECOVERY_RULE_NAME,
+  parseRecoveryCode,
+  recoverWithCode,
+  recoveryScopeParams,
+  type RecoveryCode,
   PaymentRejectedError,
   SmartAccountAgentSigner,
   TESTNET,
@@ -42,6 +51,7 @@ import {
   type Step,
 } from "@acan/core/browser";
 import { contextRules, latestLedger, read, u32 } from "./chain";
+import { DEPLOYMENT } from "./deployment";
 import { encodeAllowlistV1 } from "./policy-v1";
 
 export const XLM = ASSETS.xlm.sac;
@@ -93,6 +103,10 @@ interface Saved {
   contractId?: string;
   credentialId?: string;
   grant?: SavedGrant;
+  /** The recovery rule, once a recovery code was made (the code itself is never stored). */
+  recovery?: { ruleId: number };
+  /** This browser's passkey was added with a recovery code (not the wallet's first passkey). */
+  recovered?: boolean;
 }
 
 export type Outcome =
@@ -139,6 +153,7 @@ export async function friendbot(address: string): Promise<void> {
 export class Sandbox {
   private state: Saved;
   readonly kit: SmartAccountKit;
+  private readonly storage = new IndexedDBStorage();
   readonly agent: Keypair;
   readonly attacker: Keypair;
   readonly deployer: Keypair;
@@ -168,7 +183,7 @@ export class Sandbox {
       ed25519VerifierAddress: OZ_SMART_ACCOUNT.ed25519Verifier,
       // No relayer: this page's own testnet deployer pays the fees.
       deployerSecret: this.state.deployerSecret,
-      storage: new IndexedDBStorage(),
+      storage: this.storage,
       rpName: "ACAN sandbox",
     });
   }
@@ -208,7 +223,92 @@ export class Sandbox {
   async connect(): Promise<void> {
     if (this.kit.isConnected && this.kit.contractId === this.state.contractId) return;
     if (!this.state.contractId) throw new Error("Create the wallet first");
+    if (this.state.recovered && this.state.credentialId) {
+      // A passkey added with a recovery code is not the wallet's first passkey, so the
+      // kit's birth check for first passkeys does not apply. The account and the
+      // passkey come from the guardian's own code; signing looks the passkey up on-chain.
+      (this.kit as unknown as { setConnectedState(c: string, k: string): void }).setConnectedState(this.state.contractId, this.state.credentialId);
+      return;
+    }
     await this.kit.connectWallet({ contractId: this.state.contractId, credentialId: this.state.credentialId });
+  }
+
+  get recovery(): { ruleId: number } | undefined {
+    return this.state.recovery;
+  }
+
+  get recovered(): boolean {
+    return Boolean(this.state.recovered);
+  }
+
+  /**
+   * Adds a recovery key to the account under its own rule: scoped to the account's
+   * own address and limited by ACAN's recovery scope policy to adding a signer to
+   * the guardian's rule (#0). Returns the code; it is not stored anywhere.
+   */
+  async setupRecovery(progress: (m: string) => void): Promise<RecoveryCode> {
+    const policy = DEPLOYMENT.recoveryScopePolicy;
+    if (!policy) throw new Error("Recovery codes are not set up on this deployment yet (npm run recovery:deploy).");
+    const account = this.state.contractId;
+    if (!account) throw new Error("Create the wallet first");
+    await this.connect();
+    const key = Keypair.random();
+    const signer = createEd25519Signer(OZ_SMART_ACCOUNT.ed25519Verifier, key.rawPublicKey());
+    progress("Approve the recovery rule with your passkey…");
+    const tx = await this.kit.rules.add(
+      createCallContractContext(account),
+      RECOVERY_RULE_NAME,
+      [signer],
+      new Map<string, unknown>([[policy, recoveryScopeParams(GUARDIAN_RULE_ID)]]),
+    );
+    const simulated = tx.result as ContextRule | undefined;
+    const result = await this.kit.signAndSubmitAdmin(tx);
+    if (!result.success) throw new Error(result.error?.message ?? "The recovery rule was not created");
+    const ruleId =
+      typeof simulated?.id === "number"
+        ? simulated.id
+        : Math.max(...(await contextRules(account)).filter((r) => r.signers.some((x) => x.kind === "ed25519" && x.key === key.publicKey())).map((r) => r.id));
+    if (!Number.isInteger(ruleId)) throw new Error("The recovery rule was created but its id could not be read back; reload the page");
+    this.state.recovery = { ruleId };
+    save(this.state);
+    return { account, ruleId, secret: key.secret() };
+  }
+
+  /**
+   * On a new device: creates a passkey here and adds it to the account's
+   * guardian rule, authorized by the recovery code.
+   */
+  async recover(codeText: string, progress: (m: string) => void): Promise<string> {
+    const code = parseRecoveryCode(codeText);
+    progress("Funding a throwaway testnet account to pay the fee…");
+    await friendbot(this.deployer.publicKey());
+    progress("Create a passkey for this device when your browser asks…");
+    const created = await (this.kit as unknown as {
+      createPasskey(app: string, user: string): Promise<{ credentialId: string; publicKey: Uint8Array; rawResponse: { response: { transports?: string[] } } }>;
+    }).createPasskey("ACAN sandbox", `Recovered guardian ${new Date().toLocaleDateString()}`);
+    const signer = createWebAuthnSigner(OZ_SMART_ACCOUNT.webauthnVerifier, created.publicKey, created.credentialId);
+    progress("Adding the new passkey to your account with the recovery code…");
+    const hash = await recoverWithCode({ code, signer: signerToScVal(signer), source: this.deployer });
+    await this.storage.save({
+      credentialId: created.credentialId,
+      publicKey: created.publicKey,
+      contractId: code.account,
+      nickname: "Recovered passkey",
+      createdAt: Date.now(),
+      transports: created.rawResponse.response.transports,
+      isPrimary: false,
+      contextRuleId: GUARDIAN_RULE_ID,
+      deploymentStatus: "deployed",
+      associationVerified: true,
+    } as StoredCredential);
+    this.state.contractId = code.account;
+    this.state.credentialId = created.credentialId;
+    this.state.recovered = true;
+    this.state.recovery = { ruleId: code.ruleId };
+    this.state.grant = undefined;
+    this.cosignerService = undefined;
+    save(this.state);
+    return hash;
   }
 
   async addXlm(): Promise<void> {

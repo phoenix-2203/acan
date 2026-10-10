@@ -14,3 +14,4 @@ export * from "./errors.js";
 export * from "./receipt.js";
 export * from "./receipt-check.js";
 export * from "./provenance/index.js";
+export * from "./recovery.js";

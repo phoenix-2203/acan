@@ -199,3 +199,11 @@ button.small-btn { padding: 6px 10px; font-size: 12px; font-weight: 500; }
 .receipt-lines .blocked { color: var(--danger); }
 .receipt-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ok-text { color: var(--ok); font-weight: 600; }
+
+/* Recovery code (guardian wallet step) */
+.recover-form { display: grid; gap: 8px; margin-top: 12px; }
+.recover-form textarea { width: 100%; font-size: 13px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); resize: vertical; }
+.recovery-card { margin-top: 14px; padding: 18px 20px; border: 1.5px solid var(--accent); border-radius: 14px; display: grid; gap: 12px; justify-items: start; }
+.recovery-card h3, .recovery-card p { margin: 0; }
+.recovery-code { display: block; width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px dashed var(--line); font-size: 13px; line-height: 1.5; word-break: break-all; user-select: all; }
+.recovery-warn { font-size: 14px; color: var(--danger); background: var(--danger-bg); padding: 10px 12px; border-radius: 10px; }

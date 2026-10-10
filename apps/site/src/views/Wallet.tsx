@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { LEDGERS_PER_DAY } from "@acan/core/browser";
 import { AccountView } from "../AccountView";
+import { RecoveryPanel } from "../Recovery";
 import { explorer, short, toUnits, units } from "../chain";
 import { DEPLOYMENT } from "../deployment";
 import { MERCHANTS } from "../merchants";
@@ -94,6 +95,7 @@ export function WalletView() {
               Create wallet with passkey
             </button>
           )}
+          <RecoveryPanel />
         </li>
 
         <li className={step === 2 ? "now" : step > 2 ? "done" : "todo"}>

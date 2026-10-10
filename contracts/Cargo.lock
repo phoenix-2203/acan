@@ -19,6 +19,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "acan-recovery-scope-policy"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "soroban-sdk",
+ "stellar-accounts",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
