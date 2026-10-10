@@ -88,6 +88,10 @@ gated allowance: the clean task was co-signed and paid, the Tidewire task was he
 agent's key alone was refused (#3213), and the Agent team run behaved as specified,
 including the cancel.
 
+**Recovery code** (10 Oct 2026). A code made on the demo site recovered the wallet in
+another browser: the new passkey got a rule of its own ("recovered passkey") and granted
+an allowance there, and the first browser could still revoke.
+
 **Provenance gate for any AI client** (`npm run demo:gate`, ACAN's USDC account, gated
 rule #13):
 
