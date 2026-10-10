@@ -13,6 +13,8 @@ inside every limit.
 <https://phoenix-2203.github.io/acan/>). Everything runs on Stellar **testnet**.
 Built for the *Find Your Way* hackathon (General Track).
 
+**Demo video (2:35):** <https://youtu.be/JY-dgpmHlTM>
+
 ## What ACAN does
 
 1. **Provenance-gated payments (new).** Limits and allowlists stop the wrong shop.
