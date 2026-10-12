@@ -635,8 +635,8 @@ ACAN runs on testnet today. What it would take to put it in front of real money:
 
 - **Who it is for.** Wallets and agent platforms that let AI agents pay for things
   (x402 services, MCP clients such as Claude Desktop or Cursor), and teams that give
-  agents budgets. The SDK pieces (`packages/core`, the policies, the MCP server) are
-  MIT and can be embedded.
+  agents budgets. The reusable pieces (the `packages/core` library, the policies, the
+  MCP server) are MIT and can be embedded; they are not yet published as an npm package.
 - **Running the co-signer.** Today it runs on ACAN's server for the demo site, or
   locally (`npm run cosigner`). In production it would run where the agent cannot
   reach it: on the user's own device, at the wallet provider, or as several
@@ -650,7 +650,7 @@ ACAN runs on testnet today. What it would take to put it in front of real money:
     circuits it builds on are audited.
   - Recovery that does not depend on one saved code (for example, several
     guardians or a time-locked recovery).
-- **How it could pay for itself.** The SDK and contracts stay open source; a hosted
+- **How it could pay for itself.** The library and contracts stay open source; a hosted
   co-signer could charge per co-signature or per month. This is a plan, not
   something built.
 
